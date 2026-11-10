@@ -1,0 +1,22 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+flask = "*"
+flask-sqlalchemy = "*"
+flask-limiter = "*"
+python-dotenv = "*"
+stripe = "*"
+gunicorn = "*"
+psycopg2-binary = "*"
+tzdata = "*"
+
+[dev-packages]
+pytest = "*"
+
+[scripts]
+start = "flask --app api.app:create_app run --host 0.0.0.0 --port 5001 --debug"
+seed = "flask --app api.app:create_app seed"
+test = "pytest -q"

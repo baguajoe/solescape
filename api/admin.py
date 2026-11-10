@@ -1,0 +1,448 @@
+import hmac
+import re
+from datetime import date, datetime, time, timedelta
+from functools import wraps
+
+from flask import Blueprint, current_app, jsonify, request, session
+from sqlalchemy import or_
+
+from . import payments
+from .availability import (iso_utc, date_label, lock_calendar, month_bounds, still_free, time_label, to_local,
+                           to_utc)
+from .extensions import limiter
+from .models import (AddOn, Booking, DEFAULT_SETTINGS, Message, Order, Product, Service, TimeOff, WeeklyHours, db,
+                     deposit_default_cents, get_setting, set_setting, utcnow)
+from .public import clean, contact_error, fail, feed_token
+from .serializers import (addon_json, booking_admin, order_admin, product_json, service_json)
+
+bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+HM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def admin_required(fn):
+    @wraps(fn)
+    def inner(*args, **kwargs):
+        if not session.get("admin"):
+            return fail("Sign in to continue.", 401)
+        return fn(*args, **kwargs)
+    return inner
+
+
+@bp.post("/login")
+@limiter.limit("10 per 15 minutes")
+def login():
+    password = str((request.get_json(silent=True) or {}).get("password") or "")
+    if not hmac.compare_digest(password.encode(), current_app.config["ADMIN_PASSWORD"].encode()):
+        return fail("That password isn't right.", 401)
+    session.clear()
+    session["admin"] = True
+    return jsonify(ok=True)
+
+
+@bp.post("/logout")
+def logout():
+    session.clear()
+    return jsonify(ok=True)
+
+
+@bp.get("/me")
+def me():
+    return jsonify(admin=bool(session.get("admin")))
+
+
+@bp.get("/calendar")
+@admin_required
+def calendar_month():
+    try:
+        first, last = month_bounds(request.args.get("month", ""))
+    except (ValueError, TypeError):
+        return fail("Use a month like 2026-11.")
+    start = to_utc(datetime.combine(first, time.min))
+    end = to_utc(datetime.combine(last + timedelta(days=1), time.min))
+    now = utcnow()
+    rows = (Booking.query.filter(Booking.start_at < end, Booking.end_at > start)
+            .filter(or_(Booking.status != "held", Booking.hold_expires_at > now))
+            .order_by(Booking.start_at).all())
+    blocks = TimeOff.query.filter(TimeOff.start_at < end, TimeOff.end_at > start).order_by(TimeOff.start_at).all()
+    return jsonify(bookings=[booking_admin(b) for b in rows], time_off=[timeoff_json(t) for t in blocks])
+
+
+def timeoff_json(t):
+    first, last = to_local(t.start_at).date(), to_local(t.end_at - timedelta(seconds=1)).date()
+    days = [(first + timedelta(days=i)).isoformat() for i in range((last - first).days + 1)]
+    return dict(id=t.id, start_at=iso_utc(t.start_at), end_at=iso_utc(t.end_at), reason=t.reason,
+                local_dates=days,
+                label=f"{date_label(t.start_at)}, {time_label(t.start_at)} to "
+                      f"{date_label(t.end_at)}, {time_label(t.end_at)}")
+
+
+def parse_local(value):
+    return to_utc(datetime.fromisoformat(value))
+
+
+@bp.post("/bookings")
+@admin_required
+def manual_booking():
+    """For clients who call or text. Deposit is whatever she already collected."""
+    data = request.get_json(silent=True) or {}
+    if len(clean(data, "name")) < 2:
+        return fail("Enter the client's name.", field="name")
+    s = db.session.get(Service, data.get("service_id") or 0)
+    if not s:
+        return fail("Choose a service.", field="service_id")
+    try:
+        start = parse_local(clean(data, "start_local"))
+        minutes = int(data.get("duration_min") or s.duration_min or (s.min_hours or 0) * 60)
+        total = int(data.get("total_cents") or (s.price_cents or 0) * (minutes // 60 if s.hourly else 1))
+        deposit = int(data.get("deposit_paid_cents") or 0)
+    except (ValueError, TypeError):
+        return fail("Check the date, time and amounts.")
+    if minutes <= 0:
+        return fail("Enter how many minutes this appointment takes.", field="duration_min")
+    end = start + timedelta(minutes=minutes)
+    block = start - timedelta(minutes=s.setup_min)
+    lock_calendar()
+    if not still_free(block, end) and not data.get("override"):
+        db.session.rollback()
+        return fail("That overlaps another appointment or its travel time.", 409, "start_local")
+    b = Booking(service_id=s.id, service_name=s.name, addons=[], block_start_at=block, start_at=start, end_at=end,
+                status="confirmed", hours=minutes // 60 if s.hourly else None,
+                customer_name=clean(data, "name"), customer_email=clean(data, "email", 160).lower(),
+                customer_phone=clean(data, "phone", 40), location_type="home",
+                address=clean(data, "address", 400), notes=clean(data, "notes", 1000), total_cents=total,
+                deposit_cents=deposit, deposit_paid_cents=deposit, deposit_paid_at=utcnow() if deposit else None,
+                source="manual")
+    db.session.add(b)
+    db.session.commit()
+    return jsonify(booking_admin(b)), 201
+
+
+@bp.patch("/bookings/<int:bid>")
+@admin_required
+def update_booking(bid):
+    b = db.session.get(Booking, bid)
+    if not b:
+        return fail("Booking not found.", 404)
+    data = request.get_json(silent=True) or {}
+    if "status" in data:
+        if data["status"] not in ("confirmed", "completed", "cancelled", "no_show"):
+            return fail("That status isn't valid.")
+        if data["status"] == "confirmed" and b.status != "confirmed":
+            lock_calendar()
+            if not still_free(b.block_start_at, b.end_at, exclude_id=b.id):
+                db.session.rollback()
+                return fail("That time is taken. Move or cancel the other appointment first.", 409)
+        b.status = data["status"]
+        if b.status == "cancelled":
+            b.cancelled_by = "owner"
+    if "balance_paid" in data:
+        b.balance_paid = bool(data["balance_paid"])
+    if "admin_notes" in data:
+        b.admin_notes = clean(data, "admin_notes", 2000)
+    if "start_local" in data:
+        try:
+            start = parse_local(clean(data, "start_local"))
+        except ValueError:
+            return fail("Check the date and time.")
+        end = start + (b.end_at - b.start_at)
+        block = start - (b.start_at - b.block_start_at)
+        lock_calendar()
+        if not still_free(block, end, exclude_id=b.id):
+            db.session.rollback()
+            return fail("That overlaps another appointment, its setup or travel time.", 409)
+        b.block_start_at, b.start_at, b.end_at = block, start, end
+        if b.status == "payment_conflict":
+            b.status = "confirmed"
+    db.session.commit()
+    return jsonify(booking_admin(b))
+
+
+@bp.post("/bookings/<int:bid>/refund")
+@admin_required
+def refund_booking(bid):
+    b = db.session.get(Booking, bid)
+    if not b:
+        return fail("Booking not found.", 404)
+    remaining = b.deposit_paid_cents - b.refunded_cents
+    if remaining <= 0:
+        return fail("There's nothing left to refund on this booking.")
+    try:
+        amount = int((request.get_json(silent=True) or {}).get("amount_cents") or remaining)
+    except (TypeError, ValueError):
+        return fail("Enter a valid amount.")
+    if amount <= 0 or amount > remaining:
+        return fail("The refund can't be more than what's left of the deposit.")
+    try:
+        payments.refund(b.stripe_payment_intent, amount)
+    except Exception:
+        return fail("Stripe couldn't process that refund. Check your Stripe dashboard.", 502)
+    b.refunded_cents += amount
+    db.session.commit()
+    return jsonify(booking_admin(b))
+
+
+@bp.get("/messages")
+@admin_required
+def messages():
+    rows = Message.query.order_by(Message.created_at.desc()).limit(300).all()
+    return jsonify(unread=Message.query.filter_by(read=False).count(), messages=[
+        dict(id=m.id, name=m.name, email=m.email, phone=m.phone, topic=m.topic, body=m.body, read=m.read,
+             created_label=f"{date_label(m.created_at)}, {time_label(m.created_at)}") for m in rows])
+
+
+@bp.patch("/messages/<int:mid>")
+@admin_required
+def update_message(mid):
+    m = db.session.get(Message, mid)
+    if not m:
+        return fail("Message not found.", 404)
+    m.read = bool((request.get_json(silent=True) or {}).get("read", True))
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@bp.get("/orders")
+@admin_required
+def orders():
+    rows = Order.query.filter(Order.status != "pending").order_by(Order.created_at.desc()).limit(200).all()
+    return jsonify(orders=[order_admin(o) for o in rows])
+
+
+@bp.patch("/orders/<int:oid>")
+@admin_required
+def update_order(oid):
+    o = db.session.get(Order, oid)
+    if not o:
+        return fail("Order not found.", 404)
+    status = (request.get_json(silent=True) or {}).get("status")
+    if status not in ("paid", "fulfilled", "cancelled"):
+        return fail("That status isn't valid.")
+    o.status = status
+    db.session.commit()
+    return jsonify(order_admin(o))
+
+
+@bp.post("/orders/<int:oid>/refund")
+@admin_required
+def refund_order(oid):
+    o = db.session.get(Order, oid)
+    if not o:
+        return fail("Order not found.", 404)
+    if not o.paid_at or o.status == "refunded":
+        return fail("This order can't be refunded.")
+    try:
+        payments.refund(o.stripe_payment_intent, o.total_cents)
+    except Exception:
+        return fail("Stripe couldn't process that refund. Check your Stripe dashboard.", 502)
+    o.status = "refunded"
+    db.session.commit()
+    return jsonify(order_admin(o))
+
+
+def _money_or_none(value):
+    if value in (None, ""):
+        return None
+    cents = int(value)
+    if cents < 0:
+        raise ValueError
+    return cents
+
+
+@bp.get("/catalog")
+@admin_required
+def catalog():
+    return jsonify(services=[service_json(s) for s in Service.query.order_by(Service.sort_order).all()],
+                   addons=[addon_json(a) for a in AddOn.query.all()],
+                   products=[product_json(p) for p in Product.query.order_by(Product.sort_order).all()])
+
+
+@bp.post("/services")
+@admin_required
+def create_service():
+    data = request.get_json(silent=True) or {}
+    name = clean(data, "name", 120)
+    if len(name) < 2:
+        return fail("Enter a service name.", field="name")
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    if Service.query.filter_by(slug=slug).first():
+        return fail("A service with that name already exists.", field="name")
+    s = Service(slug=slug, name=name, family=name, category=clean(data, "category", 20) or "massage",
+                pricing="hourly" if data.get("pricing") == "hourly" else "fixed",
+                sort_order=(db.session.query(db.func.max(Service.sort_order)).scalar() or 0) + 1)
+    db.session.add(s)
+    return _apply_service(s, data, 201)
+
+
+@bp.patch("/services/<int:sid>")
+@admin_required
+def update_service(sid):
+    s = db.session.get(Service, sid)
+    if not s:
+        return fail("Service not found.", 404)
+    return _apply_service(s, request.get_json(silent=True) or {}, 200)
+
+
+def _apply_service(s, data, code):
+    try:
+        for key in ("price_cents", "deposit_cents", "duration_min", "min_hours", "max_hours", "setup_min"):
+            if key in data:
+                setattr(s, key, _money_or_none(data[key]))
+    except (ValueError, TypeError):
+        db.session.rollback()
+        return fail("Prices and minutes must be whole positive numbers.")
+    if s.setup_min is None:
+        s.setup_min = 30
+    for key in ("name", "family", "summary", "note", "confirm_text"):
+        if key in data and data[key] is not None:
+            setattr(s, key, clean(data, key, 1000))
+    for key in ("active", "first_time_only"):
+        if key in data:
+            setattr(s, key, bool(data[key]))
+    db.session.commit()
+    return jsonify(service_json(s)), code
+
+
+@bp.patch("/addons/<int:aid>")
+@admin_required
+def update_addon(aid):
+    a = db.session.get(AddOn, aid)
+    if not a:
+        return fail("Add-on not found.", 404)
+    data = request.get_json(silent=True) or {}
+    try:
+        if "price_cents" in data:
+            a.price_cents = _money_or_none(data["price_cents"]) or 0
+        if "extra_min" in data:
+            a.extra_min = _money_or_none(data["extra_min"]) or 0
+    except (ValueError, TypeError):
+        return fail("Prices and minutes must be whole positive numbers.")
+    if "active" in data:
+        a.active = bool(data["active"])
+    db.session.commit()
+    return jsonify(addon_json(a))
+
+
+@bp.post("/products")
+@admin_required
+def create_product():
+    data = request.get_json(silent=True) or {}
+    name = clean(data, "name", 120)
+    if len(name) < 2:
+        return fail("Enter a product name.", field="name")
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    if Product.query.filter_by(slug=slug).first():
+        return fail("A product with that name already exists.", field="name")
+    p = Product(slug=slug, name=name, price_cents=0, active=False)
+    db.session.add(p)
+    return _apply_product(p, data, 201)
+
+
+@bp.patch("/products/<int:pid>")
+@admin_required
+def update_product(pid):
+    p = db.session.get(Product, pid)
+    if not p:
+        return fail("Product not found.", 404)
+    return _apply_product(p, request.get_json(silent=True) or {}, 200)
+
+
+def _apply_product(p, data, code):
+    try:
+        if "price_cents" in data:
+            p.price_cents = _money_or_none(data["price_cents"]) or 0
+        if "stock" in data:
+            p.stock = _money_or_none(data["stock"])
+    except (ValueError, TypeError):
+        db.session.rollback()
+        return fail("Prices and stock must be whole positive numbers.")
+    for key in ("name", "summary"):
+        if key in data and data[key] is not None:
+            setattr(p, key, clean(data, key, 500))
+    for key in ("active", "taxable"):
+        if key in data:
+            setattr(p, key, bool(data[key]))
+    db.session.commit()
+    return jsonify(product_json(p)), code
+
+
+@bp.get("/schedule")
+@admin_required
+def schedule():
+    hours = WeeklyHours.query.order_by(WeeklyHours.weekday).all()
+    rows = TimeOff.query.filter(TimeOff.end_at > utcnow()).order_by(TimeOff.start_at).all()
+    return jsonify(hours=[dict(weekday=h.weekday, opens=h.opens, closes=h.closes) for h in hours],
+                   time_off=[timeoff_json(t) for t in rows])
+
+
+@bp.put("/hours")
+@admin_required
+def update_hours():
+    for row in (request.get_json(silent=True) or {}).get("hours", []):
+        h = db.session.get(WeeklyHours, row.get("weekday"))
+        if not h:
+            return fail("That day isn't valid.")
+        opens, closes = row.get("opens") or None, row.get("closes") or None
+        if opens or closes:
+            if not (opens and closes and HM_RE.match(opens) and HM_RE.match(closes) and opens < closes):
+                db.session.rollback()
+                return fail("Each open day needs an opening time before its closing time.")
+        h.opens, h.closes = opens, closes
+    db.session.commit()
+    return schedule()
+
+
+@bp.post("/time-off")
+@admin_required
+def add_time_off():
+    data = request.get_json(silent=True) or {}
+    try:
+        start, end = parse_local(clean(data, "start_local")), parse_local(clean(data, "end_local"))
+    except ValueError:
+        return fail("Enter a start and end.")
+    if end <= start:
+        return fail("The end has to be after the start.")
+    t = TimeOff(start_at=start, end_at=end, reason=clean(data, "reason"))
+    db.session.add(t)
+    db.session.commit()
+    return jsonify(timeoff_json(t)), 201
+
+
+@bp.delete("/time-off/<int:tid>")
+@admin_required
+def delete_time_off(tid):
+    t = db.session.get(TimeOff, tid)
+    if not t:
+        return fail("Time off not found.", 404)
+    db.session.delete(t)
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@bp.get("/settings")
+@admin_required
+def settings():
+    return jsonify(settings={k: get_setting(k) for k in DEFAULT_SETTINGS},
+                   calendar_feed=f"{current_app.config['PUBLIC_URL']}/api/calendar/{feed_token()}.ics")
+
+
+@bp.put("/settings")
+@admin_required
+def update_settings():
+    data = request.get_json(silent=True) or {}
+    numeric = {"deposit_dollars": (1, 1000), "buffer_min": (0, 240), "lead_hours": (0, 720),
+               "notice_hours": (0, 168), "horizon_days": (1, 365), "slot_step_min": (5, 120),
+               "hold_min": (35, 120), "tax_percent": (0, 25)}
+    for key, value in data.items():
+        if key not in DEFAULT_SETTINGS:
+            continue
+        if key in numeric:
+            low, high = numeric[key]
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return fail(f"{key} must be a number.")
+            if not low <= number <= high:
+                return fail(f"{key} must be between {low} and {high}.")
+        set_setting(key, str(value).strip())
+    db.session.commit()
+    return settings()
