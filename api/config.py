@@ -34,7 +34,7 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = APP_ENV == "production"
     MAX_CONTENT_LENGTH = 1024 * 1024
-    RATELIMIT_ENABLED = True
+    RATELIMIT_ENABLED = os.getenv("RATELIMIT_ENABLED", "true").lower() != "false"
     RATELIMIT_STORAGE_URI = "memory://"
 
 

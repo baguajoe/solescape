@@ -21,7 +21,23 @@ Open http://localhost:3000. The owner admin is at /admin, and the default passwo
 The database creates itself and loads her services the first time the API starts.
 Without Stripe keys the site runs in demo mode: a purple bar shows and no card is charged.
 
-Other commands: `pipenv run test`, `pipenv run seed`, `npm run build`.
+Other commands: `pipenv run seed`, `npm run build`.
+
+## Tests
+
+```bash
+npm test               # everything: API tests, then the browser tests
+pipenv run test        # API tests only (pytest)
+npm run test:e2e       # browser tests only: builds the site and drives it in Chrome
+```
+
+The browser tests (`e2e/`) start their own server on port 5055 in demo mode with a throwaway
+database, then click through the site on a desktop and a phone screen: every page, the contact form,
+a full booking (deposit, add to calendar, reschedule, cancel), the event hour minimum, and the owner
+admin. First time only: `npx playwright install --with-deps chromium`.
+
+GitHub runs all of it on every push and pull request (`.github/workflows/test.yml`). If the browser
+tests fail there, the run's `playwright-report` download has screenshots and a step-by-step trace.
 
 Codespaces: set port 3000 to public or open the forwarded URL. `vite.config.js` already handles the
 hot reload WebSocket.
