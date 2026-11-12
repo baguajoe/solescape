@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from flask import current_app
 from sqlalchemy import and_, or_, update
 
-from .models import Booking, CalendarLock, TimeOff, WeeklyHours, db, get_int_setting, utcnow
+from .models import Booking, CalendarLock, RecurringBlock, TimeOff, WeeklyHours, db, get_int_setting, utcnow
 
 BLOCKING = ("confirmed", "payment_conflict")
 
@@ -57,7 +57,40 @@ def busy_intervals(start, end, exclude_id=None):
     bookings = [(b.block_start_at, b.end_at) for b in q.all()]
     blocks = [(t.start_at, t.end_at) for t in
               TimeOff.query.filter(TimeOff.start_at < end, TimeOff.end_at > start).all()]
+    blocks += [(s, e) for _, s, e in recurring_occurrences(start, end)]
     return bookings, blocks
+
+
+def recurring_on(r, day):
+    """Does weekly block r repeat on this local date?"""
+    return day.weekday() == r.weekday and day >= r.starts_on and (r.ends_on is None or day <= r.ends_on)
+
+
+def recurring_occurrences(start, end, rows=None):
+    """Weekly blocks expanded into (block, utc start, utc end) between two UTC times."""
+    rows = RecurringBlock.query.all() if rows is None else rows
+    if not rows:
+        return []
+    out = []
+    day, last = to_local(start).date(), to_local(end).date()
+    while day <= last:
+        for r in rows:
+            if recurring_on(r, day):
+                s, e = to_utc(datetime.combine(day, _hm(r.start_hm))), to_utc(datetime.combine(day, _hm(r.end_hm)))
+                if s < end and e > start:
+                    out.append((r, s, e))
+        day += timedelta(days=1)
+    return out
+
+
+def overlapping_appointments(intervals):
+    """Confirmed appointments (setup included) that overlap any of these UTC intervals."""
+    if not intervals:
+        return []
+    lo, hi = min(s for s, _ in intervals), max(e for _, e in intervals)
+    rows = (Booking.query.filter(Booking.status.in_(BLOCKING), Booking.block_start_at < hi, Booking.end_at > lo)
+            .order_by(Booking.start_at).all())
+    return [b for b in rows if any(b.block_start_at < e and b.end_at > s for s, e in intervals)]
 
 
 def conflicts(start, end, bookings, blocks, buffer_min):

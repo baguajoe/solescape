@@ -6,12 +6,14 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 export default function AdminSchedule() {
   const [hours, setHours] = useState(null);
   const [off, setOff] = useState([]);
+  const [weekly, setWeekly] = useState([]);
+  const [overlaps, setOverlaps] = useState([]);
   const [block, setBlock] = useState({ start_local: '', end_local: '', reason: '' });
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
 
   const load = useCallback(() => {
-    api('/admin/schedule').then((r) => { setHours(r.hours); setOff(r.time_off); }).catch((e) => setError(e.message));
+    api('/admin/schedule').then((r) => { setHours(r.hours); setOff(r.time_off); setWeekly(r.weekly); }).catch((e) => setError(e.message));
   }, []);
   useEffect(load, [load]);
 
@@ -24,12 +26,15 @@ export default function AdminSchedule() {
   async function addOff(e) {
     e.preventDefault(); setError('');
     try {
-      await api('/admin/time-off', { method: 'POST', body: block });
-      setBlock({ start_local: '', end_local: '', reason: '' }); load();
+      const r = await api('/admin/time-off', { method: 'POST', body: block });
+      setOverlaps(r.overlaps); setBlock({ start_local: '', end_local: '', reason: '' }); load();
     } catch (err) { setError(err.message); }
   }
   async function removeOff(id) {
     try { await api(`/admin/time-off/${id}`, { method: 'DELETE' }); load(); } catch (err) { setError(err.message); }
+  }
+  async function removeWeekly(id) {
+    try { await api(`/admin/recurring-blocks/${id}`, { method: 'DELETE' }); load(); } catch (err) { setError(err.message); }
   }
 
   if (!hours) return error ? <p className="error" role="alert">{error}</p> : <p>Loading…</p>;
@@ -64,10 +69,25 @@ export default function AdminSchedule() {
         </div>
         <label className="field"><span>Reason (only you see this)</span><input value={block.reason} onChange={(e) => setBlock({ ...block, reason: e.target.value })} /></label>
         <button className="btn btn-small">Block this time</button>
+        {overlaps.length > 0 && (
+          <div className="warn-box" role="alert">
+            <p><b>Blocked, but this overlaps {overlaps.length} confirmed appointment{overlaps.length > 1 ? 's' : ''}.</b> Nothing was cancelled. Reschedule or cancel from the Calendar if you need to.</p>
+            <ul>{overlaps.map((o) => <li key={o.id}>{o.label}</li>)}</ul>
+          </div>
+        )}
         {off.length > 0 && <ul className="plain">
           {off.map((t) => <li key={t.id}><span>{t.label}{t.reason ? ` (${t.reason})` : ''}</span> <button type="button" className="linkish" onClick={() => removeOff(t.id)}>Remove</button></li>)}
         </ul>}
       </form>
+      <section className="panel">
+        <h2>Weekly blocks</h2>
+        <p className="note">To add one, pick a day on the Calendar, choose "Block part of this day" and tick the box to repeat it every week.</p>
+        {weekly.length === 0 ? <p>No weekly blocks.</p> : (
+          <ul className="plain">
+            {weekly.map((w) => <li key={w.id}><span>{w.label}{w.reason ? ` (${w.reason})` : ''}</span> <button type="button" className="linkish" onClick={() => removeWeekly(w.id)}>Remove</button></li>)}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

@@ -106,6 +106,51 @@ class Booking(db.Model):
     stripe_payment_intent = db.Column(db.String(255), nullable=True)
     source = db.Column(db.String(20), default="online")
     created_at = db.Column(db.DateTime, default=utcnow)
+    # Pricing as it was when booked, so later changes to a special or the corporate program never alter it.
+    # Older rows have None here: regular = total, no discount.
+    regular_cents = db.Column(db.Integer, nullable=True)
+    discount_cents = db.Column(db.Integer, nullable=True)
+    discount_kind = db.Column(db.String(20), nullable=True)  # special | corporate | corporate_reward
+    discount_label = db.Column(db.String(200), nullable=True)
+    special_id = db.Column(db.Integer, nullable=True)  # no foreign key: a special can be deleted later
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=True, index=True)
+    company = db.relationship("Company", lazy="joined")
+
+    @property
+    def regular(self):
+        return self.regular_cents if self.regular_cents is not None else self.total_cents
+
+    @property
+    def discount(self):
+        return self.discount_cents or 0
+
+
+class Company(db.Model):
+    """Corporate loyalty program: a company books events with its code."""
+    __tablename__ = "companies"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False)
+    contact_name = db.Column(db.String(120), default="")
+    email = db.Column(db.String(160), default="")
+    phone = db.Column(db.String(40), default="")
+    notes = db.Column(db.Text, default="")
+    code = db.Column(db.String(40), unique=True, nullable=False)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=utcnow)
+
+
+class Special(db.Model):
+    """A sale on chosen services between two local dates, inclusive. Date ranges never overlap."""
+    __tablename__ = "specials"
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(160), nullable=False)
+    description = db.Column(db.Text, default="")
+    service_ids = db.Column(db.JSON, default=list)
+    discount_type = db.Column(db.String(10), nullable=False)  # percent | amount
+    discount_value = db.Column(db.Integer, nullable=False)  # whole percent, or cents off
+    starts_on = db.Column(db.Date, nullable=False)
+    ends_on = db.Column(db.Date, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
 
 class Order(db.Model):
@@ -164,6 +209,18 @@ class TimeOff(db.Model):
     reason = db.Column(db.String(200), default="")
 
 
+class RecurringBlock(db.Model):
+    """Blocks the same local hours every week, e.g. every Wednesday 13:00-15:00."""
+    __tablename__ = "recurring_blocks"
+    id = db.Column(db.Integer, primary_key=True)
+    weekday = db.Column(db.Integer, nullable=False)  # 0 = Monday
+    start_hm = db.Column(db.String(5), nullable=False)
+    end_hm = db.Column(db.String(5), nullable=False)
+    starts_on = db.Column(db.Date, nullable=False)
+    ends_on = db.Column(db.Date, nullable=True)  # None = keeps repeating
+    reason = db.Column(db.String(200), default="")
+
+
 class Setting(db.Model):
     __tablename__ = "settings"
     key = db.Column(db.String(60), primary_key=True)
@@ -197,6 +254,17 @@ DEFAULT_SETTINGS = {
     "hold_min": "35",
     "tax_percent": "0",
     "policies": POLICIES,
+    # Specials: does the sale depend on the day the client books, or the day of the appointment?
+    "special_date_basis": "booking",  # booking | appointment
+    # Corporate loyalty program, for event services. Off until she turns it on and writes the description.
+    "corporate_enabled": "0",
+    "corporate_description": "",
+    "corporate_reward_type": "percent",  # percent (every booking) | nth (after N completed events)
+    "corporate_percent": "10",
+    "corporate_every_n": "5",
+    "corporate_nth_reward": "percent",  # percent | hours
+    "corporate_nth_percent": "50",
+    "corporate_nth_hours": "1",
 }
 
 
@@ -217,6 +285,29 @@ def deposit_default_cents():
         return round(float(get_setting("deposit_dollars")) * 100)
     except ValueError:
         return 7500
+
+
+def get_float_setting(key):
+    try:
+        return float(get_setting(key))
+    except ValueError:
+        return float(DEFAULT_SETTINGS[key])
+
+
+def add_missing_columns():
+    """create_all() never alters existing tables. Add any new, nullable columns so an existing
+    database keeps working after an update. It never drops or changes a column."""
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    for table in db.metadata.sorted_tables:
+        if not insp.has_table(table.name):
+            continue
+        have = {c["name"] for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            if col.name not in have and col.nullable and not col.primary_key:
+                kind = col.type.compile(dialect=db.engine.dialect)
+                db.session.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {kind}'))
+    db.session.commit()
 
 
 def set_setting(key, value):

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api, duration, lengthLabel, money, PHONE, priceLabel, SMS } from '../api.js';
+import { api, duration, lengthLabel, money, PHONE, SMS } from '../api.js';
+import { PriceLines, PriceTag } from '../components/Pricing.jsx';
 import SlotPicker from '../components/SlotPicker.jsx';
 import usePage from '../usePage.js';
 
@@ -21,6 +22,10 @@ export default function Book({ config }) {
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [price, setPrice] = useState(null);
 
   useEffect(() => {
     api('/services').then(setCatalog).catch((e) => setError({ message: e.message }));
@@ -46,7 +51,32 @@ export default function Book({ config }) {
 
   function choose(s) {
     setSlug(s.slug); setAddonIds([]); setQuote(null); setConfirmed(false); setExtra(false);
-    setHours(s.min_hours || 3); setError(null);
+    setHours(s.min_hours || 3); setError(null); setPrice(null);
+  }
+
+  // The server prices everything: regular price, any special or corporate discount, total and deposit
+  const corporateOn = Boolean(config?.corporate) && service?.category === 'event';
+  const usedCode = corporateOn ? code : '';
+  useEffect(() => {
+    if (!service) return undefined;
+    let live = true;
+    const q = new URLSearchParams({ service: service.slug, addons: addonIds.join(',') });
+    if (hourly) q.set('hours', hours);
+    if (start) q.set('start_at', start.start_at);
+    if (usedCode) q.set('code', usedCode);
+    api(`/quote?${q}`)
+      .then((r) => { if (live) { setPrice(r); setCodeError(''); } })
+      .catch((e) => {
+        if (!live) return;
+        if (e.field === 'corporate_code') { setCodeError(e.message); setCode(''); } else setPrice(null);
+      });
+    return () => { live = false; };
+  }, [service?.slug, hours, addonIds.join(','), start?.start_at, usedCode]);
+
+  function applyCode() {
+    setCodeError('');
+    if (error?.field === 'corporate_code') setError(null);
+    setCode(codeInput.trim());
   }
 
   const query = service
@@ -64,6 +94,7 @@ export default function Book({ config }) {
         body: {
           ...form, service: service.slug, addon_ids: addonIds, hours: hourly ? hours : undefined,
           start_at: start.start_at, extra_therapists: extra, confirmed_requirement: confirmed, agreed_policy: agreed,
+          corporate_code: usedCode || undefined,
         },
       });
       window.location.assign(r.checkout_url);
@@ -91,7 +122,7 @@ export default function Book({ config }) {
                   <label key={s.id} className={`choice ${slug === s.slug ? 'on' : ''}`}>
                     <input type="radio" name="service" checked={slug === s.slug} onChange={() => choose(s)} />
                     <span><b>{lengthLabel(s)}</b><small>{s.summary}</small></span>
-                    <span className="choice-price">{priceLabel(s)}</span>
+                    <PriceTag s={s} className="choice-price" />
                   </label>
                 ))}
               </fieldset>
@@ -126,6 +157,23 @@ export default function Book({ config }) {
                   <input type="checkbox" checked={extra} onChange={(e) => setExtra(e.target.checked)} />
                   <span>I'd like more than one therapist. Kerimah will confirm availability and pricing.</span>
                 </label>
+              )}
+              {corporateOn && (
+                <div className="corporate-code">
+                  <label className="field" htmlFor="corporate-code"><span>Corporate code (optional)</span></label>
+                  <div className="row tight">
+                    <input id="corporate-code" value={codeInput} autoComplete="off" aria-invalid={Boolean(codeError)}
+                      aria-describedby="corporate-code-help"
+                      onChange={(e) => { setCodeInput(e.target.value); setCodeError(''); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCode(); } }} />
+                    <button type="button" className="btn btn-small btn-ghost" disabled={!codeInput.trim()} onClick={applyCode}>Apply code</button>
+                  </div>
+                  <p id="corporate-code-help" className="note">
+                    {codeError ? <span className="error-text" role="alert">{codeError}</span>
+                      : price?.company_name ? <span role="status">Code applied for {price.company_name}.</span>
+                        : config.corporate.description.split('\n')[0]}
+                  </p>
+                </div>
               )}
             </section>
           )}
@@ -172,7 +220,7 @@ export default function Book({ config }) {
                 <span>I agree to the reservation policies</span>
               </label>
               {error?.field && error.field !== 'start_at' && <p className="error" role="alert">{error.message}</p>}
-              <button className="btn" disabled={busy}>{busy ? 'Holding your time…' : `Pay ${money(quote?.deposit_cents)} deposit`}</button>
+              <button className="btn" disabled={busy}>{busy ? 'Holding your time…' : `Pay ${money(price?.deposit_cents ?? quote?.deposit_cents)} deposit`}</button>
             </form>
           )}
           <p className="note">Questions before you book? <a href={SMS}>Text {PHONE}</a>.</p>
@@ -186,12 +234,9 @@ export default function Book({ config }) {
               <p><b>{service.family}</b><br />{hourly ? `${hours} hours` : duration(service.duration_min)}</p>
               {addonIds.length > 0 && <p>+ {addons.filter((a) => addonIds.includes(a.id)).map((a) => a.name).join(', ')}</p>}
               {start && <p>{start.date_label}<br />{start.label}, arrival {start.arrival_label}</p>}
-              {quote && (
-                <dl>
-                  <div><dt>Total</dt><dd>{money(quote.total_cents)}</dd></div>
-                  <div><dt>Deposit today</dt><dd>{money(quote.deposit_cents)}</dd></div>
-                  <div><dt>Due at appointment</dt><dd>{money(quote.total_cents - quote.deposit_cents)}</dd></div>
-                </dl>
+              {price && (
+                <PriceLines regular={price.regular_cents} discount={price.discount_cents} label={price.discount_label}
+                  total={price.total_cents} deposit={price.deposit_cents} due={price.total_cents - price.deposit_cents} />
               )}
               {extra && <p className="note">Extra therapists are quoted separately.</p>}
             </>

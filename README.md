@@ -50,6 +50,22 @@ Pages: Home, Services (menu, events, policies, questions), About, Contact (with 
 - Clients: her menu, a live calendar that blocks her 30-minute setup and travel time, hourly events with a 3-hour minimum, a $75 deposit at checkout, a confirmation page, add to calendar, reschedule once (24 hours' notice) and cancel online
 - Kerimah (`/admin`): month calendar showing arrival times, phone or text bookings, reschedule, cancel, refund, mark balance paid, prices, setup time, hours, time off, deposit amount, travel time, policy text, a Messages inbox for the Contact form, a private calendar link for her phone. Adding a product turns on the Shop.
 
+## Blocking time, specials and corporate clients
+
+- **Calendar:** pick a day to "Block this day" or "Block part of this day". Part-day blocks can repeat every
+  week, with an optional end date. Blocks show on the calendar and can be removed there. Weekly blocks are
+  also listed under Hours and time off. Blocking over a confirmed appointment warns her and never cancels it.
+- **Specials:** one special at a time, on chosen services, as a percent or dollars off. It shows a banner on
+  Home and Services, sale prices on the menu, and turns off after its end date. Settings chooses whether it
+  depends on the booking date (default) or the appointment date.
+- **Corporate clients:** each company gets a code for Recovery Lounge and Foot Loose bookings. The reward
+  (a percent off every event, or a reward after N completed events) is set in Settings. It's off by default,
+  and the site doesn't mention it until it's on and she has written the program description.
+- A special and a corporate discount never stack: the larger one applies. A discount never takes the total
+  below the deposit. Each booking stores the discount it got, so later changes don't affect it.
+- New database columns are added automatically on startup (`add_missing_columns` in `api/models.py`). It only
+  adds nullable columns and never changes or drops anything.
+
 ## Before going live
 
 1. **Confirm the business details** listed in `CLAUDE_PROMPT.md` under "Confirm with Kerimah".

@@ -40,12 +40,22 @@ def _when(b):
     return f"{date_label(b.start_at)} at {time_label(b.start_at)}"
 
 
+def price_lines(b):
+    """Regular price, discount and total on separate lines when a discount was applied."""
+    if not b.discount:
+        return f"Total: {money(b.total_cents)}\n"
+    return (f"Regular price: {money(b.regular)}\n{b.discount_label}: -{money(b.discount)}\n"
+            f"Total: {money(b.total_cents)}\n")
+
+
 def booking_confirmed(b):
     url = f"{current_app.config['PUBLIC_URL']}/booking/{b.token}"
     balance = b.total_cents - b.deposit_paid_cents
+    company = f"Company: {b.company.name}\n" if b.company_id and b.company else ""
     send(b.customer_email, f"Your SoleScape appointment: {_when(b)}",
          f"Hi {b.customer_name},\n\nYou're booked for {b.service_name} on {_when(b)}.\n"
          f"Kerimah will arrive at {time_label(b.block_start_at)} to set up at {b.address}.\n\n"
+         f"{price_lines(b)}"
          f"Deposit paid: {money(b.deposit_paid_cents)} (non-refundable, applied to your balance)\n"
          f"Balance due: {money(balance)}\n\n"
          f"View, reschedule or cancel: {url}\n\nQuestions? Text 617.297.8564.\n\nKerimah\n"
@@ -53,7 +63,8 @@ def booking_confirmed(b):
     send(current_app.config["OWNER_EMAIL"], f"New booking: {b.service_name}, {_when(b)}",
          f"{b.customer_name} ({b.customer_phone}, {b.customer_email})\n{b.service_name}\n{_when(b)}\n"
          f"Arrive for setup: {time_label(b.block_start_at)}\nWhere ({b.location_type}): {b.address}\n"
-         f"Extra therapists requested: {'yes' if b.extra_therapists else 'no'}\n"
+         f"Extra therapists requested: {'yes' if b.extra_therapists else 'no'}\n{company}"
+         f"{price_lines(b)}"
          f"Deposit: {money(b.deposit_paid_cents)}, balance {money(balance)}\nNotes: {b.notes or 'none'}\n")
 
 

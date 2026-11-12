@@ -30,9 +30,11 @@ def create_app(overrides=None):
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
 
+    from .models import add_missing_columns
     from .seed import seed_if_empty
     with app.app_context():
         db.create_all()
+        add_missing_columns()
         seed_if_empty()
 
     @app.cli.command("seed")

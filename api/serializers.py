@@ -29,6 +29,7 @@ def booking_public(b):
                 time_label=time_label(b.start_at), end_time_label=time_label(b.end_at),
                 arrival_label=time_label(b.block_start_at), location_type=b.location_type, address=b.address,
                 customer_name=b.customer_name, total_cents=b.total_cents, deposit_cents=b.deposit_cents,
+                regular_cents=b.regular, discount_cents=b.discount, discount_label=b.discount_label,
                 deposit_paid_cents=b.deposit_paid_cents, balance_cents=b.total_cents - b.deposit_paid_cents,
                 reschedule_count=b.reschedule_count, cancelled_by=b.cancelled_by,
                 can_reschedule=upcoming and b.reschedule_count == 0 and b.start_at - utcnow() >= notice,
@@ -39,6 +40,8 @@ def booking_admin(b):
     return dict(booking_public(b), id=b.id, customer_email=b.customer_email, customer_phone=b.customer_phone,
                 notes=b.notes, admin_notes=b.admin_notes, balance_paid=b.balance_paid,
                 refunded_cents=b.refunded_cents, source=b.source, extra_therapists=b.extra_therapists,
+                discount_kind=b.discount_kind, company_id=b.company_id,
+                company_name=b.company.name if b.company_id and b.company else None,
                 local_date=to_local(b.start_at).strftime("%Y-%m-%d"))
 
 

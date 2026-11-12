@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, lengthLabel, priceLabel } from '../api.js';
+import { api, lengthLabel } from '../api.js';
+import { PriceTag } from './Pricing.jsx';
 
 export function useCatalog() {
   const [catalog, setCatalog] = useState(null);
@@ -26,7 +27,7 @@ export function Family({ name, rows, note, extra }) {
           <li key={s.id}>
             <div className="len">
               <b>{lengthLabel(s)}</b>
-              <span className="price">{priceLabel(s)}</span>
+              <PriceTag s={s} />
             </div>
             <p>{s.summary}</p>
             <Link className="btn btn-small" to={`/book?service=${s.slug}`}>Book {s.pricing === 'hourly' ? name : lengthLabel(s)}</Link>

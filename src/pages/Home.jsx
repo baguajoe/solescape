@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import { money } from '../api.js';
+import { SpecialBanner } from '../components/Pricing.jsx';
 import { slugOf, useCatalog } from '../components/Services.jsx';
 import usePage from '../usePage.js';
 
-export default function Home() {
+export default function Home({ config }) {
   usePage('', 'Therapeutic mobile massage and foot care from Kerimah, a licensed massage therapist, at your home or workplace from Boston to the South Coast. Book online with a $75 deposit.');
   const { families } = useCatalog();
 
@@ -30,6 +31,8 @@ export default function Home() {
         </figure>
       </section>
 
+      {config?.special && <div className="wrap"><SpecialBanner special={config.special} /></div>}
+
       <section className="band band-sage">
         <div className="wrap">
           <h2>How it works</h2>
@@ -49,12 +52,16 @@ export default function Home() {
         <div className="teasers">
           {families.map((f) => {
             const low = Math.min(...f.rows.map((s) => s.price_cents));
+            const saleLow = Math.min(...f.rows.map((s) => s.sale?.price_cents ?? s.price_cents));
             const hourly = f.rows[0].pricing === 'hourly';
+            const per = hourly ? '/hr' : '';
             return (
               <Link key={f.name} className="teaser" to={`/services#${slugOf(f.name)}`}>
                 <h3>{f.name}</h3>
                 <p>{f.rows[0].summary}</p>
-                <span className="price">{hourly ? `${money(low)}/hr` : `From ${money(low)}`}</span>
+                {saleLow < low
+                  ? <span className="price">{hourly ? '' : 'From '}<s aria-label={`Regular price ${money(low)}${per}`}>{money(low)}{per}</s> <span className="sale">{money(saleLow)}{per}</span></span>
+                  : <span className="price">{hourly ? `${money(low)}/hr` : `From ${money(low)}`}</span>}
               </Link>
             );
           })}

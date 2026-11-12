@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, money, PHONE, SMS } from '../api.js';
+import { PriceLines } from '../components/Pricing.jsx';
 import SlotPicker from '../components/SlotPicker.jsx';
 import usePage from '../usePage.js';
 
@@ -64,11 +65,8 @@ export default function BookingDone({ config }) {
         {b.addons.map((a) => <p key={a.name}>+ {a.name}</p>)}
         <p>{b.date_label}<br />{b.time_label} to {b.end_time_label}</p>
         <p>Kerimah arrives at {b.arrival_label} to set up at {b.address}.</p>
-        <dl>
-          <div><dt>Total</dt><dd>{money(b.total_cents)}</dd></div>
-          <div><dt>Deposit paid</dt><dd>{money(b.deposit_paid_cents)}</dd></div>
-          <div><dt>Due at appointment</dt><dd>{money(b.balance_cents)}</dd></div>
-        </dl>
+        <PriceLines regular={b.regular_cents} discount={b.discount_cents} label={b.discount_label} total={b.total_cents}
+          deposit={b.deposit_paid_cents} depositLabel="Deposit paid" due={b.balance_cents} />
       </div>
       {error && <p className="error" role="alert">{error}</p>}
 

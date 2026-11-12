@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 import stripe
 from flask import Blueprint, Response, abort, current_app, jsonify, request
 
-from . import ics, notify, payments
+from . import ics, notify, payments, pricing
 from .availability import (BLOCKING, date_label, iso_utc, lock_calendar, month_bounds, slot_is_open,
                            slots_between, time_label, to_utc)
 from .extensions import limiter
@@ -19,6 +19,7 @@ log = logging.getLogger("solescape.api")
 bp = Blueprint("public", __name__, url_prefix="/api")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 TEXT_HER = "Text 617.297.8564"
+CODE_INVALID = "That corporate code isn't valid. Check it with your company, or leave it blank."
 
 
 class QuoteError(ValueError):
@@ -83,8 +84,7 @@ def quote(service, addons, hours=None):
         hours = None
         total = service.price_cents + sum(a.price_cents for a in addons)
         minutes = service.duration_min + sum(a.extra_min or 0 for a in addons)
-    deposit = service.deposit_cents if service.deposit_cents is not None else deposit_default_cents()
-    return total, minutes, min(max(deposit, 100), total), hours
+    return total, minutes, pricing.deposit_for(service, total), hours
 
 
 @bp.get("/config")
@@ -97,6 +97,8 @@ def config():
         notice_hours=get_int_setting("notice_hours"),
         lead_hours=get_int_setting("lead_hours"),
         shop_open=Product.query.filter_by(active=True).count() > 0,
+        special=pricing.special_public(pricing.active_special()),
+        corporate=dict(description=get_setting("corporate_description").strip()) if pricing.corporate_live() else None,
         hours=[dict(weekday=d, opens=hours[d].opens, closes=hours[d].closes) for d in sorted(hours)],
     )
 
@@ -105,7 +107,40 @@ def config():
 def services():
     rows = Service.query.filter_by(active=True).order_by(Service.sort_order).all()
     addons = AddOn.query.filter_by(active=True).all()
-    return jsonify(services=[service_json(s) for s in rows], addons=[addon_json(a) for a in addons])
+    sp = pricing.active_special()
+    out = []
+    for s in rows:
+        row = service_json(s)
+        if sp and s.id in (sp.service_ids or []) and s.price_cents:
+            row["sale"] = dict(price_cents=pricing.sale_price(sp, s), terms=pricing.special_terms(sp))
+        out.append(row)
+    return jsonify(services=out, addons=[addon_json(a) for a in addons])
+
+
+@bp.get("/quote")
+@limiter.limit("300 per hour")
+def price_quote():
+    """Price breakdown for the booking form: regular price, any discount, total and deposit."""
+    s = get_bookable(request.args.get("service", ""))
+    if not s:
+        return fail("That service can't be booked online.", 404)
+    addons = selected_addons(request.args.get("addons", "").split(","), s)
+    try:
+        regular, _, _, hours = quote(s, addons, request.args.get("hours"))
+    except QuoteError as e:
+        return fail(str(e), field="hours")
+    try:
+        start = parse_start(request.args["start_at"]) if request.args.get("start_at") else None
+    except ValueError:
+        start = None
+    code = request.args.get("code", "")
+    company = pricing.find_company(code) if code and s.category == "event" and pricing.corporate_live() else None
+    if code and s.category == "event" and not company:
+        return fail(CODE_INVALID, field="corporate_code")
+    out = pricing.price(s, addons, hours, regular, start, company)
+    out.pop("company_id")
+    out.pop("special_id")
+    return jsonify({**out, "company_name": company.name if company else None})
 
 
 def _availability_args():
@@ -192,15 +227,22 @@ def create_booking():
 
     addons = selected_addons(data.get("addon_ids") or [], s)
     try:
-        total, minutes, deposit, hours = quote(s, addons, data.get("hours"))
+        regular, minutes, _, hours = quote(s, addons, data.get("hours"))
     except QuoteError as e:
         return fail(str(e), field="hours")
     unit = lambda a: a.price_cents * (hours if a.per_hour and hours else 1)  # noqa: E731
+    company = None
+    code = clean(data, "corporate_code", 40)
+    if code and s.category == "event":
+        company = pricing.find_company(code) if pricing.corporate_live() else None
+        if not company:
+            return fail(CODE_INVALID, field="corporate_code")
 
-    lock_calendar()
+    lock_calendar()  # also serializes claims on a company's earned reward
     if not slot_is_open(start, minutes, s.setup_min):
         db.session.rollback()
         return fail("That time was just taken. Choose another.", 409, "start_at")
+    p = pricing.price(s, addons, hours, regular, start, company)
     b = Booking(service_id=s.id, service_name=s.name, hours=hours,
                 addons=[dict(name=a.name, price_cents=unit(a)) for a in addons],
                 block_start_at=start - timedelta(minutes=s.setup_min), start_at=start,
@@ -209,7 +251,10 @@ def create_booking():
                 customer_name=clean(data, "name"), customer_email=email,
                 customer_phone=clean(data, "phone", 40), location_type=location, address=address,
                 extra_therapists=bool(data.get("extra_therapists")) and s.category == "event",
-                notes=clean(data, "notes", 1000), total_cents=total, deposit_cents=deposit)
+                notes=clean(data, "notes", 1000), total_cents=p["total_cents"], deposit_cents=p["deposit_cents"],
+                regular_cents=p["regular_cents"], discount_cents=p["discount_cents"],
+                discount_kind=p["discount_kind"], discount_label=p["discount_label"],
+                special_id=p["special_id"], company_id=p["company_id"])
     db.session.add(b)
     db.session.commit()
 

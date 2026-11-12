@@ -6,12 +6,12 @@ from functools import wraps
 from flask import Blueprint, current_app, jsonify, request, session
 from sqlalchemy import or_
 
-from . import payments
-from .availability import (iso_utc, date_label, lock_calendar, month_bounds, still_free, time_label, to_local,
-                           to_utc)
+from . import payments, pricing
+from .availability import (BLOCKING, iso_utc, date_label, lock_calendar, month_bounds, overlapping_appointments,
+                           recurring_occurrences, still_free, time_label, to_local, to_utc)
 from .extensions import limiter
-from .models import (AddOn, Booking, DEFAULT_SETTINGS, Message, Order, Product, Service, TimeOff, WeeklyHours, db,
-                     deposit_default_cents, get_setting, set_setting, utcnow)
+from .models import (AddOn, Booking, Company, DEFAULT_SETTINGS, Message, Order, Product, RecurringBlock, Service,
+                     Special, TimeOff, WeeklyHours, db, deposit_default_cents, get_setting, set_setting, utcnow)
 from .public import clean, contact_error, fail, feed_token
 from .serializers import (addon_json, booking_admin, order_admin, product_json, service_json)
 
@@ -64,7 +64,28 @@ def calendar_month():
             .filter(or_(Booking.status != "held", Booking.hold_expires_at > now))
             .order_by(Booking.start_at).all())
     blocks = TimeOff.query.filter(TimeOff.start_at < end, TimeOff.end_at > start).order_by(TimeOff.start_at).all()
-    return jsonify(bookings=[booking_admin(b) for b in rows], time_off=[timeoff_json(t) for t in blocks])
+    return jsonify(bookings=[booking_admin(b) for b in rows], time_off=[timeoff_json(t) for t in blocks],
+                   blocks=day_blocks(first, last, blocks, recurring_occurrences(start, end)))
+
+
+def day_blocks(first, last, time_off, weekly):
+    """Every block shown per local day, with the part of that day it covers."""
+    out = []
+    for t in time_off:
+        day = max(first, to_local(t.start_at).date())
+        while day <= min(last, to_local(t.end_at - timedelta(seconds=1)).date()):
+            d0 = to_utc(datetime.combine(day, time.min))
+            d1 = to_utc(datetime.combine(day + timedelta(days=1), time.min))
+            s, e = max(t.start_at, d0), min(t.end_at, d1)
+            whole = s == d0 and e == d1
+            out.append(dict(kind="once", id=t.id, local_date=day.isoformat(), reason=t.reason, whole_day=whole,
+                            label="All day" if whole else f"{time_label(s)} to {time_label(e)}",
+                            span=timeoff_json(t)["label"]))
+            day += timedelta(days=1)
+    for r, s, e in weekly:
+        out.append(dict(kind="weekly", id=r.id, local_date=to_local(s).date().isoformat(), reason=r.reason,
+                        whole_day=False, label=f"{time_label(s)} to {time_label(e)}", span=weekly_label(r)))
+    return sorted(out, key=lambda x: (x["local_date"], x["label"]))
 
 
 def timeoff_json(t):
@@ -78,6 +99,31 @@ def timeoff_json(t):
 
 def parse_local(value):
     return to_utc(datetime.fromisoformat(value))
+
+
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _hm_label(hm):
+    return datetime.strptime(hm, "%H:%M").strftime("%-I:%M %p")
+
+
+def weekly_label(r):
+    until = f", until {r.ends_on.strftime('%B %-d, %Y')}" if r.ends_on else ""
+    return (f"Every {DAY_NAMES[r.weekday]}, {_hm_label(r.start_hm)} to {_hm_label(r.end_hm)}, "
+            f"from {r.starts_on.strftime('%B %-d, %Y')}{until}")
+
+
+def weekly_json(r):
+    return dict(id=r.id, weekday=r.weekday, start_hm=r.start_hm, end_hm=r.end_hm, reason=r.reason,
+                starts_on=r.starts_on.isoformat(), ends_on=r.ends_on.isoformat() if r.ends_on else None,
+                label=weekly_label(r))
+
+
+def overlap_json(rows):
+    return [dict(id=b.id, local_date=to_local(b.start_at).strftime("%Y-%m-%d"),
+                 label=f"{date_label(b.start_at)}, {time_label(b.start_at)}: {b.service_name}, {b.customer_name}")
+            for b in rows]
 
 
 @bp.post("/bookings")
@@ -99,6 +145,9 @@ def manual_booking():
         return fail("Check the date, time and amounts.")
     if minutes <= 0:
         return fail("Enter how many minutes this appointment takes.", field="duration_min")
+    company = db.session.get(Company, int(data.get("company_id") or 0)) if data.get("company_id") else None
+    if data.get("company_id") and not company:
+        return fail("Company not found.", field="company_id")
     end = start + timedelta(minutes=minutes)
     block = start - timedelta(minutes=s.setup_min)
     lock_calendar()
@@ -111,7 +160,8 @@ def manual_booking():
                 customer_phone=clean(data, "phone", 40), location_type="home",
                 address=clean(data, "address", 400), notes=clean(data, "notes", 1000), total_cents=total,
                 deposit_cents=deposit, deposit_paid_cents=deposit, deposit_paid_at=utcnow() if deposit else None,
-                source="manual")
+                source="manual", regular_cents=total, discount_cents=0,
+                company_id=company.id if company else None)
     db.session.add(b)
     db.session.commit()
     return jsonify(booking_admin(b)), 201
@@ -370,8 +420,11 @@ def _apply_product(p, data, code):
 def schedule():
     hours = WeeklyHours.query.order_by(WeeklyHours.weekday).all()
     rows = TimeOff.query.filter(TimeOff.end_at > utcnow()).order_by(TimeOff.start_at).all()
+    weekly = RecurringBlock.query.order_by(RecurringBlock.weekday, RecurringBlock.start_hm).all()
+    today = to_local(utcnow()).date()
     return jsonify(hours=[dict(weekday=h.weekday, opens=h.opens, closes=h.closes) for h in hours],
-                   time_off=[timeoff_json(t) for t in rows])
+                   time_off=[timeoff_json(t) for t in rows],
+                   weekly=[weekly_json(r) for r in weekly if r.ends_on is None or r.ends_on >= today])
 
 
 @bp.put("/hours")
@@ -404,7 +457,47 @@ def add_time_off():
     t = TimeOff(start_at=start, end_at=end, reason=clean(data, "reason"))
     db.session.add(t)
     db.session.commit()
-    return jsonify(timeoff_json(t)), 201
+    # Appointments are never cancelled by a block. She is told, and decides.
+    return jsonify({**timeoff_json(t), "overlaps": overlap_json(overlapping_appointments([(start, end)]))}), 201
+
+
+@bp.post("/recurring-blocks")
+@admin_required
+def add_recurring_block():
+    data = request.get_json(silent=True) or {}
+    try:
+        weekday = int(data.get("weekday"))
+        starts_on = date.fromisoformat(clean(data, "starts_on")) if data.get("starts_on") else \
+            to_local(utcnow()).date()
+        ends_on = date.fromisoformat(clean(data, "ends_on")) if data.get("ends_on") else None
+    except (TypeError, ValueError):
+        return fail("Choose a day and check the dates.")
+    start_hm, end_hm = clean(data, "start_time"), clean(data, "end_time")
+    if not 0 <= weekday <= 6:
+        return fail("Choose a day of the week.")
+    if not (HM_RE.match(start_hm) and HM_RE.match(end_hm) and start_hm < end_hm):
+        return fail("Enter a start time before the end time.")
+    if ends_on and ends_on < starts_on:
+        return fail("The end date has to be after the start date.")
+    r = RecurringBlock(weekday=weekday, start_hm=start_hm, end_hm=end_hm, starts_on=starts_on, ends_on=ends_on,
+                       reason=clean(data, "reason"))
+    db.session.add(r)
+    db.session.commit()
+    upcoming = Booking.query.filter(Booking.status.in_(BLOCKING), Booking.end_at > utcnow())
+    last = max([b.end_at for b in upcoming] or [utcnow()])
+    hits = [(s, e) for _, s, e in recurring_occurrences(utcnow(), last + timedelta(days=1), [r])]
+    return jsonify({**weekly_json(r), "overlaps": overlap_json(overlapping_appointments(hits))}), 201
+
+
+@bp.delete("/recurring-blocks/<int:rid>")
+@admin_required
+def delete_recurring_block(rid):
+    r = db.session.get(RecurringBlock, rid)
+    if not r:
+        return fail("Weekly block not found.", 404)
+    db.session.delete(r)
+    db.session.commit()
+    return jsonify(ok=True)
 
 
 @bp.delete("/time-off/<int:tid>")
@@ -432,9 +525,19 @@ def update_settings():
     numeric = {"deposit_dollars": (1, 1000), "buffer_min": (0, 240), "lead_hours": (0, 720),
                "notice_hours": (0, 168), "horizon_days": (1, 365), "slot_step_min": (5, 120),
                "hold_min": (35, 120), "tax_percent": (0, 25)}
+    numeric.update(corporate_percent=(1, 100), corporate_every_n=(1, 100), corporate_nth_percent=(1, 100),
+                   corporate_nth_hours=(1, 12))
+    choices = {"special_date_basis": ("booking", "appointment"), "corporate_enabled": ("0", "1"),
+               "corporate_reward_type": ("percent", "nth"), "corporate_nth_reward": ("percent", "hours")}
+    labels = {"corporate_percent": "The corporate discount", "corporate_every_n": "The number of events",
+              "corporate_nth_percent": "The reward discount", "corporate_nth_hours": "The free hours"}
     for key, value in data.items():
         if key not in DEFAULT_SETTINGS:
             continue
+        if key in choices:
+            value = str(value)
+            if value not in choices[key]:
+                return fail(f"{key} isn't a valid choice.")
         if key in numeric:
             low, high = numeric[key]
             try:
@@ -442,7 +545,175 @@ def update_settings():
             except (TypeError, ValueError):
                 return fail(f"{key} must be a number.")
             if not low <= number <= high:
-                return fail(f"{key} must be between {low} and {high}.")
+                return fail(f"{labels.get(key, key)} must be between {low} and {high}.")
         set_setting(key, str(value).strip())
     db.session.commit()
     return settings()
+
+
+# Corporate clients
+
+def company_json(c, history=False):
+    rows = Booking.query.filter_by(company_id=c.id).order_by(Booking.start_at.desc()).all()
+    now = utcnow()
+    live = [b for b in rows if b.status != "held" or (b.hold_expires_at and b.hold_expires_at > now)]
+    out = dict(id=c.id, name=c.name, contact_name=c.contact_name, email=c.email, phone=c.phone, notes=c.notes,
+               code=c.code, active=c.active, progress=pricing.company_progress(c),
+               booking_count=sum(1 for b in live if b.status in pricing.USED),
+               spent_cents=sum(b.total_cents for b in live if b.status == "completed"),
+               upcoming_count=sum(1 for b in live if b.status == "confirmed" and b.start_at > now))
+    if history:
+        out["bookings"] = [booking_admin(b) for b in live]
+    return out
+
+
+@bp.get("/companies")
+@admin_required
+def companies():
+    rows = Company.query.order_by(Company.name).all()
+    return jsonify(companies=[company_json(c, history=True) for c in rows],
+                   program=dict(live=pricing.corporate_live(), enabled=get_setting("corporate_enabled") == "1",
+                                reward_type=get_setting("corporate_reward_type"), terms=pricing.reward_terms(),
+                                every_n=max(int(float(get_setting("corporate_every_n"))), 1)))
+
+
+def _apply_company(c, data):
+    for key, limit in (("name", 160), ("contact_name", 120), ("phone", 40), ("notes", 2000)):
+        if key in data:
+            setattr(c, key, clean(data, key, limit))
+    if "email" in data:
+        c.email = clean(data, "email", 160).lower()
+    if "active" in data:
+        c.active = bool(data["active"])
+    if len(c.name or "") < 2:
+        return "Enter the company name.", "name"
+    if c.email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", c.email):
+        return "Enter a valid email address.", "email"
+    if "code" in data and clean(data, "code"):
+        code = pricing.normalize_code(data["code"])
+        if len(code) < 4:
+            return "Use at least 4 letters or numbers for the code.", "code"
+        taken = Company.query.filter(Company.code == code, Company.id != (c.id or 0)).first()
+        if taken:
+            return "Another company already uses that code.", "code"
+        c.code = code
+    if not c.code:
+        c.code = pricing.new_code(c.name)
+    return None
+
+
+@bp.post("/companies")
+@admin_required
+def create_company():
+    c = Company()
+    err = _apply_company(c, request.get_json(silent=True) or {})
+    if err:
+        return fail(err[0], field=err[1])
+    db.session.add(c)
+    db.session.commit()
+    return jsonify(company_json(c, history=True)), 201
+
+
+@bp.patch("/companies/<int:cid>")
+@admin_required
+def update_company(cid):
+    c = db.session.get(Company, cid)
+    if not c:
+        return fail("Company not found.", 404)
+    err = _apply_company(c, request.get_json(silent=True) or {})
+    if err:
+        db.session.rollback()
+        return fail(err[0], field=err[1])
+    db.session.commit()
+    return jsonify(company_json(c, history=True))
+
+
+# Specials
+
+def special_json(sp):
+    today = to_local(utcnow()).date()
+    state = "active" if sp.starts_on <= today <= sp.ends_on else ("ended" if sp.ends_on < today else "scheduled")
+    return dict(id=sp.id, title=sp.title, description=sp.description, service_ids=sp.service_ids or [],
+                discount_type=sp.discount_type, discount_value=sp.discount_value, terms=pricing.special_terms(sp),
+                starts_on=sp.starts_on.isoformat(), ends_on=sp.ends_on.isoformat(), state=state,
+                used_count=Booking.query.filter(Booking.special_id == sp.id,
+                                                Booking.status.in_(pricing.USED)).count())
+
+
+@bp.get("/specials")
+@admin_required
+def specials():
+    rows = Special.query.order_by(Special.starts_on.desc()).all()
+    return jsonify(specials=[special_json(sp) for sp in rows], date_basis=get_setting("special_date_basis"))
+
+
+def _apply_special(sp, data):
+    title = clean(data, "title", 160)
+    if len(title) < 2:
+        return "Enter a title.", "title"
+    valid = {s.id for s in Service.query.all()}
+    ids = sorted({int(x) for x in (data.get("service_ids") or []) if str(x).isdigit() and int(x) in valid})
+    if not ids:
+        return "Choose at least one service.", "service_ids"
+    kind = data.get("discount_type")
+    if kind not in ("percent", "amount"):
+        return "Choose a percent or a dollar amount off.", "discount_type"
+    try:
+        value = float(data.get("discount_value"))
+        starts_on, ends_on = date.fromisoformat(clean(data, "starts_on")), date.fromisoformat(clean(data, "ends_on"))
+    except (TypeError, ValueError):
+        return "Enter the discount, a start date and an end date.", "discount_value"
+    if kind == "percent" and not 1 <= value <= 90:
+        return "Use a percent between 1 and 90.", "discount_value"
+    if kind == "amount" and not 1 <= value <= 1000:
+        return "Use a dollar amount between $1 and $1,000.", "discount_value"
+    if ends_on < starts_on:
+        return "The end date has to be on or after the start date.", "ends_on"
+    clash = Special.query.filter(Special.starts_on <= ends_on, Special.ends_on >= starts_on,
+                                 Special.id != (sp.id or 0)).first()
+    if clash:
+        return (f"“{clash.title}” runs {clash.starts_on:%B %-d} to {clash.ends_on:%B %-d}. Only one special "
+                "can run at a time, so pick dates that don't overlap or change that special first."), "starts_on"
+    sp.title, sp.description, sp.service_ids = title, clean(data, "description", 2000), ids
+    sp.discount_type = kind
+    sp.discount_value = int(round(value)) if kind == "percent" else int(round(value * 100))
+    sp.starts_on, sp.ends_on = starts_on, ends_on
+    return None
+
+
+@bp.post("/specials")
+@admin_required
+def create_special():
+    sp = Special()
+    err = _apply_special(sp, request.get_json(silent=True) or {})
+    if err:
+        return fail(err[0], field=err[1])
+    db.session.add(sp)
+    db.session.commit()
+    return jsonify(special_json(sp)), 201
+
+
+@bp.patch("/specials/<int:sid>")
+@admin_required
+def update_special(sid):
+    sp = db.session.get(Special, sid)
+    if not sp:
+        return fail("Special not found.", 404)
+    err = _apply_special(sp, request.get_json(silent=True) or {})
+    if err:
+        db.session.rollback()
+        return fail(err[0], field=err[1])
+    db.session.commit()
+    return jsonify(special_json(sp))
+
+
+@bp.delete("/specials/<int:sid>")
+@admin_required
+def delete_special(sid):
+    """Past bookings keep the discount they got: it's copied onto each booking."""
+    sp = db.session.get(Special, sid)
+    if not sp:
+        return fail("Special not found.", 404)
+    db.session.delete(sp)
+    db.session.commit()
+    return jsonify(ok=True)
