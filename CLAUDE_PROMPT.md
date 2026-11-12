@@ -48,14 +48,16 @@ Use the hero paragraph as the Home meta description, and the headline plus parag
 | Sole Cleanse | 120 min | $300 | 90-min full body massage, trigger point therapy, hot stone therapy, firm pressure, gentle stretch + 15-min foot soak, 15-min foot massage, foot exfoliant, hot towels. | LMT arrives 30 minutes prior for setup. |
 | Mama's Sole Relief | 60 min | $190 | 45-minute full-body massage alleviating weight-bearing joints, light to firm pressure + 15-min foot massage, hot towels. | 2nd & 3rd trimester clients. LMT arrives 30 minutes prior for setup. |
 | Mama's Sole Relief | 90 min | $225 | 60-min full body massage alleviating weight-bearing joints, gentle trigger point therapy, light to firm pressure + 15-min foot soak, 15-min foot massage, foot exfoliant, hot towels. | 2nd & 3rd trimester clients. LMT arrives 30 minutes prior for setup. |
-| Recovery Lounge | per hour, 3-hour minimum | $190/hr | Therapeutic 15-minute or 20-minute massages in a specialized chair, fully clothed, improving mobility within your scalp, neck, back & shoulders. Convenient for corporate events, community events, and special events. | Minimum 3 hours, additional LMTs available upon request, arrives 30 minutes prior for setup. |
-| Foot Loose | per hour, 3-hour minimum | $190/hr | Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture. Convenient for corporate events, community events, and special events. | Minimum 3 hours, additional licensed massage therapists available upon request, arrives 30 minutes prior for setup. |
+| Recovery Lounge | per hour, 3-hour minimum | $190/hr | Therapeutic 15-minute or 20-minute massages in a specialized chair, fully clothed, improving mobility within your scalp, neck, back & shoulders. | Minimum 3 hours, additional LMTs available upon request, arrives 30 minutes prior for setup. |
+| Foot Loose | per hour, 3-hour minimum | $190/hr | Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture. | Minimum 3 hours, additional licensed massage therapists available upon request, arrives 30 minutes prior for setup. |
 
 **Add-on:** Foot soaks, $50/hr, for Foot Loose only ("Add foot soaks $50/hr.").
 
 Group the services by family (Sole Cleanse, Mama's Sole Relief, Recovery Lounge, Foot Loose). Recovery Lounge and Foot Loose are **events**.
 
-On an existing database, the two Nov 12, 2026 description changes (Mama's Sole Relief 60 and Foot Loose) are applied on startup, but only where the old wording is still there unchanged, so her own admin edits are never overwritten.
+Her sentence "Convenient for corporate events, community events, and special events." is **not** part of the Recovery Lounge or Foot Loose descriptions. It appears once, as the intro line of the Events section on the Services page. The descriptions are used on the Services page, the Home service cards and the booking page.
+
+On an existing database, the description changes (Mama's Sole Relief 60, Recovery Lounge and Foot Loose) are applied on startup, but only where an earlier version of her wording is still there unchanged, so her own admin edits are never overwritten.
 
 **Weekly Deals (her text, Nov 12, 2026):**
 > Weekly Deals: Mondays South Coast; Wednesdays Boston. $30 off 60-minute & 90-minute sessions. Not available for Recovery Lounge or Foot Loose services.
@@ -102,7 +104,7 @@ The header nav is Home, Services, About, Contact, plus a "Book now" button. Add 
    - Her intro (section 3), the "Weekly Deals" banner near the top, then "Mobile services" (massage families as cards, each length with its price and a Book button that opens `/book?service=<slug>`), with her note under each family.
    - "Events" section on a sage background: "Convenient for corporate events, community events, and special events." plus the Recovery Lounge and Foot Loose cards and the foot soak add-on.
    - "Reservation policies" (section 4), with anchor `#policies`.
-   - "Questions": an FAQ using `<details>`, with answers built only from facts in this brief. Cover where she comes, equipment, arrival time, the deposit, rescheduling, pregnancy (Mama's Sole Relief is for the 2nd and 3rd trimester) and events (3-hour minimum, extra LMTs on request). *Written by us.*
+   - "Questions": an FAQ using `<details>`, with answers built only from facts in this brief. Cover where services are held (question "Where are services held?", answer "At your home or workplace, from Boston to the South Coast of Massachusetts."), equipment, arrival time, the deposit, rescheduling, pregnancy (Mama's Sole Relief is for the 2nd and 3rd trimester) and events (3-hour minimum, extra LMTs on request). *Written by us.*
 3. **About (`/about`)**
    - Portrait and her heading, her bio (section 5), the credentials box, and a "Book with Kerimah" button.
    - A "Why mobile" band with `table-outdoors.jpg`. *Written by us; keep it to facts: she brings everything, sets up 30 minutes early, and comes to your home, office or event.*

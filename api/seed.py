@@ -1,4 +1,4 @@
-"""Her menu, sent Nov 2026 (wording updated Nov 12, 2026). Prices in cents. Hourly services charge
+"""Her menu, sent Nov 2026 (wording updated Nov 12, 2026; event sentence moved to the Events intro after that). Prices in cents. Hourly services charge
 price_cents per hour."""
 from .models import AddOn, CalendarLock, Service, WeeklyHours, db
 
@@ -31,14 +31,13 @@ SERVICES = [
          pricing="hourly", min_hours=3, max_hours=8, price_cents=19000,
          note="Minimum 3 hours, additional LMTs available upon request, arrives 30 minutes prior for setup.",
          summary="Therapeutic 15-minute or 20-minute massages in a specialized chair, fully clothed, improving "
-         "mobility within your scalp, neck, back & shoulders. Convenient for corporate events, community events, "
-         "and special events."),
+         "mobility within your scalp, neck, back & shoulders."),
     dict(slug="foot-loose", family="Foot Loose", name="Foot Loose", category="event", pricing="hourly",
          min_hours=3, max_hours=8, price_cents=19000,
          note="Minimum 3 hours, additional licensed massage therapists available upon request, arrives 30 minutes "
          "prior for setup.",
          summary="Foot massages for overworked feet, reducing chronic tension throughout your body + improving "
-         "posture. Convenient for corporate events, community events, and special events."),
+         "posture."),
 ]
 
 HOURS = {0: ("11:00", "19:00"), 1: ("11:00", "19:00"), 2: ("11:30", "19:00"), 3: ("11:00", "19:00"),
@@ -52,21 +51,25 @@ def ensure_lock():
 
 
 # Her earlier wording, replaced in Nov 2026. update_wording() swaps it on an existing database, but only where
-# the text is still exactly the old wording, so an edit she made in the admin is never overwritten.
+# the text is still exactly one of the old versions, so an edit she made in the admin is never overwritten.
+# "Convenient for corporate events, community events, and special events." now lives only in the Events intro.
+EVENTS_LINE = " Convenient for corporate events, community events, and special events."
 OLD_SUMMARIES = {
-    "mamas-sole-relief-60": "Full body massage alleviating weight-bearing joints, light to firm pressure + 15-min "
-                            "foot massage, hot towels.",
-    "foot-loose": "Foot massages for overworked feet, reducing chronic tension throughout your body + improving "
-                  "posture.",
+    "mamas-sole-relief-60": ["Full body massage alleviating weight-bearing joints, light to firm pressure + 15-min "
+                             "foot massage, hot towels."],
+    "recovery-lounge": ["Therapeutic 15-minute or 20-minute massages in a specialized chair, fully clothed, improving "
+                        "mobility within your scalp, neck, back & shoulders." + EVENTS_LINE],
+    "foot-loose": ["Foot massages for overworked feet, reducing chronic tension throughout your body + improving "
+                   "posture." + EVENTS_LINE],
 }
 
 
 def update_wording():
     new = {row["slug"]: row["summary"] for row in SERVICES}
     changed = False
-    for slug, old in OLD_SUMMARIES.items():
+    for slug, olds in OLD_SUMMARIES.items():
         s = Service.query.filter_by(slug=slug).first()
-        if s and s.summary == old:
+        if s and s.summary in olds and s.summary != new[slug]:
             s.summary = new[slug]
             changed = True
     if changed:

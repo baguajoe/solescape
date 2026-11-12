@@ -68,7 +68,7 @@ export default function Book({ config }) {
     if (area) q.set('area', area);
     if (usedCode) q.set('code', usedCode);
     api(`/quote?${q}`)
-      .then((r) => { if (live) { setPrice(r); setCodeError(''); } })
+      .then((r) => { if (live) { setPrice(r); if (usedCode) setCodeError(''); } }) // keep a bad-code message after the code is dropped
       .catch((e) => {
         if (!live) return;
         if (e.field === 'corporate_code') { setCodeError(e.message); setCode(''); } else setPrice(null);

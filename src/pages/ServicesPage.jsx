@@ -16,7 +16,7 @@ export default function ServicesPage({ config }) {
   const soaks = catalog?.addons.find((a) => a.name === 'Foot soaks');
   const deposit = money(config?.deposit_cents ?? 7500);
   const faqs = [
-    ['Where do you come?', 'To your home or workplace, from Boston to the South Coast of Massachusetts.'],
+    ['Where are services held?', 'At your home or workplace, from Boston to the South Coast of Massachusetts.'],
     ['Do I need my own table or supplies?', 'No. All equipment is provided for your service.'],
     ['When does Kerimah arrive?', 'Thirty minutes before your start time, to set up.'],
     ['How does the deposit work?', `Every reservation needs a ${deposit} deposit to hold your date and time. It's applied to your balance and is non-refundable.`],

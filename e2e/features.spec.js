@@ -187,13 +187,32 @@ test.describe('her wording', () => {
     await expect(page.getByRole('heading', { name: 'She comes to you' })).toBeVisible();
 
     // Service descriptions also show on the Home cards and the booking page
-    await expect(page.locator('.teaser', { hasText: 'Foot Loose' })).toContainText('Convenient for corporate events, community events, and special events.');
+    for (const name of ['Foot Loose', 'Recovery Lounge']) {
+      await expect(page.locator('.teaser', { hasText: name })).not.toContainText('Convenient for corporate events');
+    }
+    await expect(page.locator('.teaser', { hasText: 'Foot Loose' })).toContainText('Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture.');
     await page.goto('/book?service=mamas-sole-relief-60');
     await expect(page.locator('.choice', { hasText: '60 minutes' }).filter({ hasText: 'weight-bearing' })).toContainText('45-minute full-body massage alleviating weight-bearing joints');
 
     await page.goto('/services');
-    await expect(page.locator('#foot-loose')).toContainText('Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture. Convenient for corporate events, community events, and special events.');
+    await expect(page.locator('#foot-loose li')).toContainText('Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture.');
+    await expect(page.locator('#recovery-lounge li')).toContainText('Therapeutic 15-minute or 20-minute massages in a specialized chair, fully clothed, improving mobility within your scalp, neck, back & shoulders.');
+    await expect(page.locator('#events li')).not.toContainText(['Convenient for corporate events']);
+    // The sentence appears once on the page, as the Events intro
+    await expect(page.locator('#events > p').first()).toHaveText('Convenient for corporate events, community events, and special events.');
+    await expect(page.getByText('Convenient for corporate events, community events, and special events.')).toHaveCount(1);
+    await page.getByText('Where are services held?').click();
+    await expect(page.locator('details', { hasText: 'Where are services held?' }).locator('p')).toHaveText('At your home or workplace, from Boston to the South Coast of Massachusetts.');
+    await expect(page.getByText('Where do you come?')).toHaveCount(0);
+
     await expect(page.locator('#mama-s-sole-relief li', { hasText: '60 minutes' })).toContainText('45-minute full-body massage alleviating weight-bearing joints, light to firm pressure + 15-min foot massage, hot towels.');
+
+    // Booking page uses the same descriptions
+    await page.goto('/book?service=recovery-lounge');
+    const lounge = page.locator('fieldset.choice-group', { has: page.locator('legend', { hasText: 'Recovery Lounge' }) });
+    await expect(lounge.locator('.choice small')).toHaveText('Therapeutic 15-minute or 20-minute massages in a specialized chair, fully clothed, improving mobility within your scalp, neck, back & shoulders.');
+    const foot = page.locator('fieldset.choice-group', { has: page.locator('legend', { hasText: 'Foot Loose' }) });
+    await expect(foot.locator('.choice small')).toHaveText('Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture.');
   });
 });
 

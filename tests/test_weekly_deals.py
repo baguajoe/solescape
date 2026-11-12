@@ -36,8 +36,11 @@ def booking(client, token):
 def test_her_new_service_wording(client):
     s = {x["slug"]: x for x in client.get("/api/services").get_json()["services"]}
     assert s["foot-loose"]["summary"] == (
-        "Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture. "
-        "Convenient for corporate events, community events, and special events.")
+        "Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture.")
+    assert s["recovery-lounge"]["summary"] == (
+        "Therapeutic 15-minute or 20-minute massages in a specialized chair, fully clothed, improving mobility "
+        "within your scalp, neck, back & shoulders.")
+    assert not any("Convenient for corporate events" in x["summary"] for x in s.values())  # Events intro only
     assert s["mamas-sole-relief-60"]["summary"] == (
         "45-minute full-body massage alleviating weight-bearing joints, light to firm pressure + 15-min foot "
         "massage, hot towels.")
@@ -46,12 +49,15 @@ def test_her_new_service_wording(client):
 def test_existing_database_gets_new_wording_but_keeps_her_edits(app):
     with app.app_context():
         foot = Service.query.filter_by(slug="foot-loose").first()
+        lounge = Service.query.filter_by(slug="recovery-lounge").first()
         mama = Service.query.filter_by(slug="mamas-sole-relief-60").first()
-        foot.summary = OLD_SUMMARIES["foot-loose"]
+        foot.summary = OLD_SUMMARIES["foot-loose"][0]
+        lounge.summary = OLD_SUMMARIES["recovery-lounge"][0]
         mama.summary = "Her own edit in the admin."
         db.session.commit()
         assert update_wording() is True
-        assert foot.summary.endswith("Convenient for corporate events, community events, and special events.")
+        assert foot.summary.endswith("+ improving posture.")
+        assert lounge.summary.endswith("neck, back & shoulders.")
         assert mama.summary == "Her own edit in the admin."
         assert update_wording() is False
 
