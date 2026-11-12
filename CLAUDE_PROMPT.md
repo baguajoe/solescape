@@ -95,7 +95,7 @@ The header nav is Home, Services, About, Contact, plus a "Book now" button. Add 
    - "How it works": 3 numbered steps (Book online and pay the $75 deposit → she comes to you, arriving 30 minutes early with all equipment → relax and pay the balance; reschedule once online with 24 hours' notice). *Written by us.*
    - Her "Weekly Deals" banner (section 3) under the hero.
    - "Mobile services": one card per family showing her first description and "From $190" or "$190/hr". Each card links to that family on the Services page.
-   - Photo gallery: foot-soak, hot-stones, back-massage, foot-massage, table-outdoors.
+   - Photo gallery, four tiles laid out so each stays close to its photo's own shape (nobody cropped out): chair-massage-office (large, left), back-massage and foot-massage (stacked), table-outdoors (tall, right). On phones: chair-massage-office full width, then table-outdoors beside back-massage and foot-massage.
    - About teaser on espresso brown: her portrait, her heading and her first bio paragraph, and a "Read her story" button.
    - Closing call to action: "Wellness that comes to you." with buttons to Book and to Contact.
 2. **Services (`/services`)**
@@ -275,9 +275,8 @@ Resize them (longest side about 1000–1200px, JPEG quality around 80) and **str
 | `chair-boston.jpg` | Her massage chair by a window high above Boston Common | Home hero, in the pin frame; Open Graph image |
 | `kerimah.jpg` | Her headshot (small, about 278px wide; show it in a circle with a gold ring, at most 240px) | Home about teaser, About page |
 | `logo.png` (320px) and `logo-small.png` (128px) | Her round SoleScape logo | Header (52px, in a circle), footer, favicon |
-| `foot-soak.jpg` | An herbal foot soak melt held over a foot bath | Home gallery |
-| `hot-stones.jpg` | Hot stones on a client's back | Home gallery |
-| `back-massage.jpg` | Hands on a client's upper back | Home gallery (can hide on phones) |
+| `chair-massage-office.jpg` (landscape, 1200×800) | An LMT giving a chair massage to a client in an office. Alt: "A licensed massage therapist giving a chair massage in an office" | Home gallery, large tile |
+| `back-massage.jpg` (landscape, 1200×799; replaced Nov 12, 2026) | Hands massaging a woman's upper back on green towels. Alt: "Hands working the upper back during a massage" | Home gallery |
 | `foot-massage.jpg` | Foot reflexology | Home gallery |
 | `table-outdoors.jpg` | Her massage table on a lawn | Home gallery, About "Why mobile" |
 | `arriving.jpg` | Her packed chair at a downtown hotel entrance | Not used for now: the "Canopy Boston Downtown" mat is clearly readable, so ask before using it |
@@ -328,7 +327,7 @@ Treat these as open. Don't guess.
 1. Her real working hours (the defaults come from her old MassageBook listing).
 2. Pricing for additional therapists, and whether there's a travel fee.
 3. Whether events can be booked outside normal hours.
-4. Whether the hot stone, back massage and foot massage photos are hers or licensed stock.
+4. Whether the back massage, office chair massage and foot massage photos are hers, licensed stock or AI-generated. If any are generated or stock, the site should not present them as photos of her work.
 5. Whether to bring back the Senior Foot Health program from her old site, and whether to link her LinkedIn.
 6. Whether she keeps MassageBook during the switch. If so, block those times so nobody is double-booked.
 7. Whether she has products to sell.

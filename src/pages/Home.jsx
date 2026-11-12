@@ -66,11 +66,10 @@ export default function Home({ config }) {
       </section>
 
       <section className="gallery" aria-label="Photos">
-        <img className="g-soak" src="/images/foot-soak.jpg" alt="An herbal foot soak melt held over a warm foot bath" loading="lazy" />
-        <img className="g-stone" src="/images/hot-stones.jpg" alt="Hot stones placed along a client's back" loading="lazy" />
-        <img className="g-back" src="/images/back-massage.jpg" alt="Hands working the upper back during a massage" loading="lazy" />
-        <img className="g-foot" src="/images/foot-massage.jpg" alt="Foot reflexology with rolled towels and oils" loading="lazy" />
-        <img className="g-table" src="/images/table-outdoors.jpg" alt="A massage table set up on a lawn on a sunny day" loading="lazy" />
+        <img className="g-office" src="/images/chair-massage-office.jpg" alt="A licensed massage therapist giving a chair massage in an office" width="1200" height="800" loading="lazy" />
+        <img className="g-back" src="/images/back-massage.jpg" alt="Hands working the upper back during a massage" width="1200" height="799" loading="lazy" />
+        <img className="g-foot" src="/images/foot-massage.jpg" alt="Foot reflexology with rolled towels and oils" width="1200" height="811" loading="lazy" />
+        <img className="g-table" src="/images/table-outdoors.jpg" alt="A massage table set up on a lawn on a sunny day" width="747" height="1078" loading="lazy" />
       </section>
 
       <section className="band band-coffee">
