@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { money, PHONE, SMS } from '../api.js';
-import { SpecialBanner } from '../components/Pricing.jsx';
+import { WeeklyDealBanner } from '../components/Pricing.jsx';
 import { Family, useCatalog } from '../components/Services.jsx';
 import usePage from '../usePage.js';
 
@@ -29,7 +29,7 @@ export default function ServicesPage({ config }) {
     <div className="page">
       <h1>Services and prices</h1>
       <p className="lead">A sole to soul lasting experience. All services are performed by your licensed massage therapist (LMT) at your home or workplace. All equipment is provided for your service.</p>
-      <SpecialBanner special={config?.special} />
+      <WeeklyDealBanner deal={config?.weekly_deal} />
       {error && <p className="error" role="alert">{error}</p>}
       {!catalog && !error && <p>Loading services…</p>}
 

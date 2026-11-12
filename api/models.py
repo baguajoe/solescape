@@ -106,13 +106,13 @@ class Booking(db.Model):
     stripe_payment_intent = db.Column(db.String(255), nullable=True)
     source = db.Column(db.String(20), default="online")
     created_at = db.Column(db.DateTime, default=utcnow)
-    # Pricing as it was when booked, so later changes to a special or the corporate program never alter it.
-    # Older rows have None here: regular = total, no discount.
+    # Pricing as it was when booked, so later changes to Weekly Deals or the corporate program never alter it.
+    # Older rows have None here: regular = total, no discount. A Weekly Deal is discount_kind "weekly_deal".
     regular_cents = db.Column(db.Integer, nullable=True)
     discount_cents = db.Column(db.Integer, nullable=True)
-    discount_kind = db.Column(db.String(20), nullable=True)  # special | corporate | corporate_reward
+    discount_kind = db.Column(db.String(20), nullable=True)  # weekly_deal | corporate | corporate_reward
     discount_label = db.Column(db.String(200), nullable=True)
-    special_id = db.Column(db.Integer, nullable=True)  # no foreign key: a special can be deleted later
+    area = db.Column(db.String(20), nullable=True)  # boston | south_coast | other (None on older bookings)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=True, index=True)
     company = db.relationship("Company", lazy="joined")
 
@@ -136,20 +136,6 @@ class Company(db.Model):
     notes = db.Column(db.Text, default="")
     code = db.Column(db.String(40), unique=True, nullable=False)
     active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=utcnow)
-
-
-class Special(db.Model):
-    """A sale on chosen services between two local dates, inclusive. Date ranges never overlap."""
-    __tablename__ = "specials"
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(160), nullable=False)
-    description = db.Column(db.Text, default="")
-    service_ids = db.Column(db.JSON, default=list)
-    discount_type = db.Column(db.String(10), nullable=False)  # percent | amount
-    discount_value = db.Column(db.Integer, nullable=False)  # whole percent, or cents off
-    starts_on = db.Column(db.Date, nullable=False)
-    ends_on = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=utcnow)
 
 
@@ -254,8 +240,11 @@ DEFAULT_SETTINGS = {
     "hold_min": "35",
     "tax_percent": "0",
     "policies": POLICIES,
-    # Specials: does the sale depend on the day the client books, or the day of the appointment?
-    "special_date_basis": "booking",  # booking | appointment
+    # Weekly Deals: dollars off eligible sessions when the appointment day matches the client's area.
+    "weekly_deal_enabled": "1",
+    "weekly_deal_dollars": "30",
+    "weekly_deal_south_coast_day": "0",  # 0 = Monday ... 6 = Sunday, "" = no deal for that area
+    "weekly_deal_boston_day": "2",  # Wednesday
     # Corporate loyalty program, for event services. Off until she turns it on and writes the description.
     "corporate_enabled": "0",
     "corporate_description": "",

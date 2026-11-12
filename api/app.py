@@ -31,11 +31,12 @@ def create_app(overrides=None):
     app.register_blueprint(admin_bp)
 
     from .models import add_missing_columns
-    from .seed import seed_if_empty
+    from .seed import seed_if_empty, update_wording
     with app.app_context():
         db.create_all()
         add_missing_columns()
         seed_if_empty()
+        update_wording()
 
     @app.cli.command("seed")
     def seed_command():

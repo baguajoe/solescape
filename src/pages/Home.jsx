@@ -1,19 +1,20 @@
 import { Link } from 'react-router-dom';
 import { money } from '../api.js';
-import { SpecialBanner } from '../components/Pricing.jsx';
+import { WeeklyDealBanner } from '../components/Pricing.jsx';
 import { slugOf, useCatalog } from '../components/Services.jsx';
 import usePage from '../usePage.js';
 
 export default function Home({ config }) {
-  usePage('', 'Therapeutic mobile massage and foot care from Kerimah, a licensed massage therapist, at your home or workplace from Boston to the South Coast. Book online with a $75 deposit.');
+  usePage('', 'SoleScape Foot Spa & Massage delivers mobile therapeutic foot care to restore movement, relieve chronic pain, and prevent injuries—right where you are.');
   const { families } = useCatalog();
 
   return (
     <>
       <section className="hero">
         <div className="hero-copy">
-          <h1>A sole to soul lasting experience.</h1>
-          <p className="hero-lead">SoleScape Foot Spa &amp; Massage tailors therapeutic mobile massages to your feet. Proper body movement is restored, managing chronic foot pain, providing tension relief and preventing risks of injury.</p>
+          <h1>A complete sole to soul recovery experience.</h1>
+          <p className="hero-lead">SoleScape Foot Spa &amp; Massage delivers mobile therapeutic foot care to restore movement, relieve chronic pain, and prevent injuries—right where you are.</p>
+          <p className="tagline">She travels to you</p>
           <div className="row">
             <Link className="btn" to="/book">Book an appointment</Link>
             <Link className="btn btn-ghost" to="/services">See services and prices</Link>
@@ -31,7 +32,7 @@ export default function Home({ config }) {
         </figure>
       </section>
 
-      {config?.special && <div className="wrap"><SpecialBanner special={config.special} /></div>}
+      {config?.weekly_deal && <div className="wrap"><WeeklyDealBanner deal={config.weekly_deal} /></div>}
 
       <section className="band band-sage">
         <div className="wrap">
@@ -52,16 +53,12 @@ export default function Home({ config }) {
         <div className="teasers">
           {families.map((f) => {
             const low = Math.min(...f.rows.map((s) => s.price_cents));
-            const saleLow = Math.min(...f.rows.map((s) => s.sale?.price_cents ?? s.price_cents));
             const hourly = f.rows[0].pricing === 'hourly';
-            const per = hourly ? '/hr' : '';
             return (
               <Link key={f.name} className="teaser" to={`/services#${slugOf(f.name)}`}>
                 <h3>{f.name}</h3>
                 <p>{f.rows[0].summary}</p>
-                {saleLow < low
-                  ? <span className="price">{hourly ? '' : 'From '}<s aria-label={`Regular price ${money(low)}${per}`}>{money(low)}{per}</s> <span className="sale">{money(saleLow)}{per}</span></span>
-                  : <span className="price">{hourly ? `${money(low)}/hr` : `From ${money(low)}`}</span>}
+                <span className="price">{hourly ? `${money(low)}/hr` : `From ${money(low)}`}</span>
               </Link>
             );
           })}

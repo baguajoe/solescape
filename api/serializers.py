@@ -3,6 +3,8 @@ from datetime import timedelta
 from .availability import date_label, iso_utc, time_label, to_local
 from .models import get_int_setting, utcnow
 
+AREA_LABELS = {"boston": "Boston area", "south_coast": "South Coast", "other": "Other"}
+
 
 def service_json(s):
     return dict(id=s.id, slug=s.slug, family=s.family, name=s.name, category=s.category, summary=s.summary,
@@ -28,6 +30,9 @@ def booking_public(b):
                 start_at=iso_utc(b.start_at), end_at=iso_utc(b.end_at), date_label=date_label(b.start_at),
                 time_label=time_label(b.start_at), end_time_label=time_label(b.end_at),
                 arrival_label=time_label(b.block_start_at), location_type=b.location_type, address=b.address,
+                area=b.area, area_label=AREA_LABELS.get(b.area),
+                weekly_deal_applied=b.discount_kind == "weekly_deal",
+                weekly_deal_cents=b.discount if b.discount_kind == "weekly_deal" else 0,
                 customer_name=b.customer_name, total_cents=b.total_cents, deposit_cents=b.deposit_cents,
                 regular_cents=b.regular, discount_cents=b.discount, discount_label=b.discount_label,
                 deposit_paid_cents=b.deposit_paid_cents, balance_cents=b.total_cents - b.deposit_paid_cents,

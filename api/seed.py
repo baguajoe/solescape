@@ -1,4 +1,5 @@
-"""Her menu, sent Nov 2026. Prices in cents. Hourly services charge price_cents per hour."""
+"""Her menu, sent Nov 2026 (wording updated Nov 12, 2026). Prices in cents. Hourly services charge
+price_cents per hour."""
 from .models import AddOn, CalendarLock, Service, WeeklyHours, db
 
 SETUP = "LMT arrives 30 minutes prior for setup."
@@ -19,8 +20,8 @@ SERVICES = [
     dict(slug="mamas-sole-relief-60", family="Mama's Sole Relief", name="Mama's Sole Relief, 60 minutes",
          duration_min=60, price_cents=19000, note="2nd & 3rd trimester clients. " + SETUP,
          confirm_text="I'm in my 2nd or 3rd trimester.",
-         summary="Full body massage alleviating weight-bearing joints, light to firm pressure + 15-min foot massage, "
-         "hot towels."),
+         summary="45-minute full-body massage alleviating weight-bearing joints, light to firm pressure + 15-min "
+         "foot massage, hot towels."),
     dict(slug="mamas-sole-relief-90", family="Mama's Sole Relief", name="Mama's Sole Relief, 90 minutes",
          duration_min=90, price_cents=22500, note="2nd & 3rd trimester clients. " + SETUP,
          confirm_text="I'm in my 2nd or 3rd trimester.",
@@ -37,7 +38,7 @@ SERVICES = [
          note="Minimum 3 hours, additional licensed massage therapists available upon request, arrives 30 minutes "
          "prior for setup.",
          summary="Foot massages for overworked feet, reducing chronic tension throughout your body + improving "
-         "posture."),
+         "posture. Convenient for corporate events, community events, and special events."),
 ]
 
 HOURS = {0: ("11:00", "19:00"), 1: ("11:00", "19:00"), 2: ("11:30", "19:00"), 3: ("11:00", "19:00"),
@@ -48,6 +49,29 @@ def ensure_lock():
     if not db.session.get(CalendarLock, 1):
         db.session.add(CalendarLock(id=1, version=0))
         db.session.commit()
+
+
+# Her earlier wording, replaced in Nov 2026. update_wording() swaps it on an existing database, but only where
+# the text is still exactly the old wording, so an edit she made in the admin is never overwritten.
+OLD_SUMMARIES = {
+    "mamas-sole-relief-60": "Full body massage alleviating weight-bearing joints, light to firm pressure + 15-min "
+                            "foot massage, hot towels.",
+    "foot-loose": "Foot massages for overworked feet, reducing chronic tension throughout your body + improving "
+                  "posture.",
+}
+
+
+def update_wording():
+    new = {row["slug"]: row["summary"] for row in SERVICES}
+    changed = False
+    for slug, old in OLD_SUMMARIES.items():
+        s = Service.query.filter_by(slug=slug).first()
+        if s and s.summary == old:
+            s.summary = new[slug]
+            changed = True
+    if changed:
+        db.session.commit()
+    return changed
 
 
 def seed_if_empty():

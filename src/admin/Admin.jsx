@@ -8,7 +8,6 @@ import AdminSchedule from './AdminSchedule.jsx';
 import AdminSettings from './AdminSettings.jsx';
 import AdminMessages from './AdminMessages.jsx';
 import AdminCorporate from './AdminCorporate.jsx';
-import AdminSpecials from './AdminSpecials.jsx';
 
 function Login({ onDone }) {
   const [password, setPassword] = useState('');
@@ -53,7 +52,6 @@ export default function Admin() {
         <NavLink to="/admin/messages">Messages</NavLink>
         <NavLink to="/admin/orders">Orders</NavLink>
         <NavLink to="/admin/services">Services and products</NavLink>
-        <NavLink to="/admin/specials">Specials</NavLink>
         <NavLink to="/admin/corporate">Corporate clients</NavLink>
         <NavLink to="/admin/hours">Hours and time off</NavLink>
         <NavLink to="/admin/settings">Settings</NavLink>
@@ -65,7 +63,6 @@ export default function Admin() {
           <Route path="messages" element={<AdminMessages />} />
           <Route path="orders" element={<AdminOrders />} />
           <Route path="services" element={<AdminCatalog />} />
-          <Route path="specials" element={<AdminSpecials />} />
           <Route path="corporate" element={<AdminCorporate />} />
           <Route path="hours" element={<AdminSchedule />} />
           <Route path="settings" element={<AdminSettings />} />

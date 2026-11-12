@@ -311,13 +311,18 @@ input[aria-invalid=true] { border-color: var(--danger); }
 .foot-legal { max-width: none; }
 .family-extra { margin: 0 0 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 
-/* Specials, discounts and the corporate program */
-.special-banner { background: var(--paper); border-top: 5px solid var(--coffee); padding: 18px 22px; margin: 24px 0; }
-.special-banner h2 { font-size: 1.5rem; margin-bottom: .3em; }
-.special-banner p { margin-bottom: .4em; }
-.price s, .choice-price s { color: var(--muted); font-size: .8em; }
-.sale { color: var(--forest); }
-.sale-note { font: 600 .85rem var(--body); color: var(--forest); }
+/* Weekly Deals, discounts and the corporate program */
+.deal-banner { background: var(--paper); border-top: 5px solid var(--coffee); padding: 16px 22px; margin: 24px 0; }
+.deal-banner p { margin: 0; }
+.deal-banner strong { font-family: var(--display); color: var(--espresso); }
+.cal-day.deal { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 2px 0;
+  border-color: var(--coffee); }
+.deal-tag { display: block; font-size: .62rem; line-height: 1.1; font-weight: 700; color: var(--coffee); white-space: nowrap; }
+.cal-day.on .deal-tag { color: #fff; }
+.deal-chip { margin-left: 8px; background: var(--paper); border: 1px solid var(--coffee); color: var(--coffee); }
+.new-total h3 { margin-bottom: .3em; }
+.tagline { display: inline-block; margin: 0 0 22px; padding: 6px 16px; border-left: 4px solid var(--gold);
+  background: var(--sage); font: 400 1.3rem var(--display); color: var(--forest); }
 .price-lines .discount dd, .price-lines .discount dt { color: var(--forest); }
 .price-lines .total { font-weight: 700; }
 .corporate-note { margin-top: 24px; background: var(--paper); border-top: 5px solid var(--olive); padding: 18px 22px; }
@@ -328,8 +333,6 @@ input[aria-invalid=true] { border-color: var(--danger); }
 .company progress { width: 100%; max-width: 280px; accent-color: var(--forest); }
 .history { width: 100%; border-collapse: collapse; font-size: .92rem; margin-top: 8px; }
 .history th, .history td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
-.special-row.st-ended { opacity: .7; border-left-color: var(--line); }
-.special-row.st-active { border-left-color: var(--coffee); }
 
 /* Calendar blocks */
 .cal-day .blocked-label { display: block; font-size: .72rem; color: var(--coffee); font-weight: 600; }

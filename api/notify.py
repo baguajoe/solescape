@@ -5,6 +5,7 @@ from email.message import EmailMessage
 from flask import current_app
 
 from .availability import date_label, time_label
+from .serializers import AREA_LABELS
 
 log = logging.getLogger("solescape.mail")
 
@@ -44,7 +45,7 @@ def price_lines(b):
     """Regular price, discount and total on separate lines when a discount was applied."""
     if not b.discount:
         return f"Total: {money(b.total_cents)}\n"
-    return (f"Regular price: {money(b.regular)}\n{b.discount_label}: -{money(b.discount)}\n"
+    return (f"Regular price: {money(b.regular)}\n{b.discount_label} \u2212{money(b.discount)}\n"
             f"Total: {money(b.total_cents)}\n")
 
 
@@ -63,17 +64,26 @@ def booking_confirmed(b):
     send(current_app.config["OWNER_EMAIL"], f"New booking: {b.service_name}, {_when(b)}",
          f"{b.customer_name} ({b.customer_phone}, {b.customer_email})\n{b.service_name}\n{_when(b)}\n"
          f"Arrive for setup: {time_label(b.block_start_at)}\nWhere ({b.location_type}): {b.address}\n"
+         f"Area: {AREA_LABELS.get(b.area, 'not given')}\n"
          f"Extra therapists requested: {'yes' if b.extra_therapists else 'no'}\n{company}"
          f"{price_lines(b)}"
          f"Deposit: {money(b.deposit_paid_cents)}, balance {money(balance)}\nNotes: {b.notes or 'none'}\n")
 
 
-def booking_rescheduled(b, old_when):
+def booking_rescheduled(b, old_when, old_total=None):
+    balance = b.total_cents - b.deposit_paid_cents
+    changed = old_total is not None and old_total != b.total_cents
+    note = f"Your total changed from {money(old_total)} to {money(b.total_cents)}.\n" if changed else ""
     send(b.customer_email, f"Rescheduled: {_when(b)}",
          f"Hi {b.customer_name},\n\nYour {b.service_name} has moved from {old_when} to {_when(b)}. "
-         "Your deposit has been transferred to the new time. This was your one deposit transfer.\n")
+         "Your deposit has been transferred to the new time. This was your one deposit transfer.\n\n"
+         f"{note}{price_lines(b)}"
+         f"Deposit paid: {money(b.deposit_paid_cents)} (applied to your balance)\n"
+         f"Balance due: {money(balance)}\n")
     send(current_app.config["OWNER_EMAIL"], f"Rescheduled by client: {b.customer_name}",
-         f"{b.customer_name} moved {b.service_name} from {old_when} to {_when(b)}.\n")
+         f"{b.customer_name} moved {b.service_name} from {old_when} to {_when(b)}.\n"
+         f"Area: {AREA_LABELS.get(b.area, 'not given')}\n{note}{price_lines(b)}"
+         f"Balance due: {money(balance)}\n")
 
 
 def booking_cancelled(b):

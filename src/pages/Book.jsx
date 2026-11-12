@@ -6,6 +6,7 @@ import SlotPicker from '../components/SlotPicker.jsx';
 import usePage from '../usePage.js';
 
 const blank = { name: '', email: '', phone: '', address: '', notes: '', location_type: 'home' };
+const AREAS = [['boston', 'Boston area'], ['south_coast', 'South Coast'], ['other', 'Other']];
 
 export default function Book({ config }) {
   usePage('Book an appointment', 'Pick a time on Kerimah\'s live calendar and hold it with a $75 deposit.');
@@ -26,6 +27,7 @@ export default function Book({ config }) {
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState('');
   const [price, setPrice] = useState(null);
+  const [area, setArea] = useState('');
 
   useEffect(() => {
     api('/services').then(setCatalog).catch((e) => setError({ message: e.message }));
@@ -54,7 +56,7 @@ export default function Book({ config }) {
     setHours(s.min_hours || 3); setError(null); setPrice(null);
   }
 
-  // The server prices everything: regular price, any special or corporate discount, total and deposit
+  // The server prices everything: regular price, any Weekly Deal or corporate discount, total and deposit
   const corporateOn = Boolean(config?.corporate) && service?.category === 'event';
   const usedCode = corporateOn ? code : '';
   useEffect(() => {
@@ -63,6 +65,7 @@ export default function Book({ config }) {
     const q = new URLSearchParams({ service: service.slug, addons: addonIds.join(',') });
     if (hourly) q.set('hours', hours);
     if (start) q.set('start_at', start.start_at);
+    if (area) q.set('area', area);
     if (usedCode) q.set('code', usedCode);
     api(`/quote?${q}`)
       .then((r) => { if (live) { setPrice(r); setCodeError(''); } })
@@ -71,7 +74,7 @@ export default function Book({ config }) {
         if (e.field === 'corporate_code') { setCodeError(e.message); setCode(''); } else setPrice(null);
       });
     return () => { live = false; };
-  }, [service?.slug, hours, addonIds.join(','), start?.start_at, usedCode]);
+  }, [service?.slug, hours, addonIds.join(','), start?.start_at, usedCode, area]);
 
   function applyCode() {
     setCodeError('');
@@ -94,7 +97,7 @@ export default function Book({ config }) {
         body: {
           ...form, service: service.slug, addon_ids: addonIds, hours: hourly ? hours : undefined,
           start_at: start.start_at, extra_therapists: extra, confirmed_requirement: confirmed, agreed_policy: agreed,
-          corporate_code: usedCode || undefined,
+          corporate_code: usedCode || undefined, area,
         },
       });
       window.location.assign(r.checkout_url);
@@ -181,7 +184,15 @@ export default function Book({ config }) {
           {service && (
             <section className="step">
               <h2><span className="step-n">{n(2)}</span> Pick a date and time</h2>
-              <SlotPicker query={query} picked={start} onPick={setStart} onQuote={setQuote}
+              <fieldset className="where area" aria-describedby={service.weekly_deal && config?.weekly_deal ? 'area-deal' : undefined}>
+                <legend>Area</legend>
+                {AREAS.map(([key, label]) => (
+                  <label key={key}><input type="radio" name="area" required checked={area === key}
+                    onChange={() => { setArea(key); if (error?.field === 'area') setError(null); }} /> {label}</label>
+                ))}
+              </fieldset>
+              {service.weekly_deal && config?.weekly_deal && <p id="area-deal" className="note">Weekly Deals: {config.weekly_deal.text}</p>}
+              <SlotPicker query={query} area={area} picked={start} onPick={setStart} onQuote={setQuote}
                 onError={(e) => setError({ message: e.message })} />
               {error?.field === 'start_at' && <p className="error" role="alert">{error.message}</p>}
             </section>
@@ -234,6 +245,7 @@ export default function Book({ config }) {
               <p><b>{service.family}</b><br />{hourly ? `${hours} hours` : duration(service.duration_min)}</p>
               {addonIds.length > 0 && <p>+ {addons.filter((a) => addonIds.includes(a.id)).map((a) => a.name).join(', ')}</p>}
               {start && <p>{start.date_label}<br />{start.label}, arrival {start.arrival_label}</p>}
+              {area && <p>Area: {AREAS.find(([k]) => k === area)[1]}</p>}
               {price && (
                 <PriceLines regular={price.regular_cents} discount={price.discount_cents} label={price.discount_label}
                   total={price.total_cents} deposit={price.deposit_cents} due={price.total_cents - price.deposit_cents} />

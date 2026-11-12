@@ -96,6 +96,9 @@ test.describe('booking', () => {
     await page.getByLabel('Mobile phone').fill('617-555-0100');
     await page.getByLabel('I agree to the reservation policies').check();
     await pay.click();
+    await expect(page.getByRole('alert')).toContainText('Choose your area');
+    await page.getByLabel('Other', { exact: true }).check();
+    await pay.click();
 
     await expect(page).toHaveURL(/\/demo-pay\/booking\//);
     await page.getByRole('button', { name: 'Complete test payment' }).click();
@@ -150,7 +153,7 @@ test.describe('owner admin', () => {
     const nav = page.getByRole('navigation', { name: 'Admin' });
     await expect(nav).toBeVisible();
 
-    for (const tab of ['Messages', 'Orders', 'Services and products', 'Specials', 'Corporate clients', 'Hours and time off', 'Settings', 'Calendar']) {
+    for (const tab of ['Messages', 'Orders', 'Services and products', 'Corporate clients', 'Hours and time off', 'Settings', 'Calendar']) {
       await nav.getByRole('link', { name: tab }).click();
       await page.waitForLoadState('networkidle');
       await expect(page.getByRole('alert')).toHaveCount(0);

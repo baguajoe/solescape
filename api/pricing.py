@@ -1,18 +1,22 @@
-"""Discounts: the weekly special and the corporate loyalty program. Server-side only, in cents.
+"""Discounts: Weekly Deals and the corporate loyalty program. Server-side only, in cents.
 
 Rules:
-- A special and a corporate discount never stack. The larger one wins; on a tie the special wins,
-  so a company keeps an earned reward for later.
+- Weekly Deals (her text, Nov 2026): "Mondays South Coast; Wednesdays Boston. $30 off 60-minute & 90-minute
+  sessions. Not available for Recovery Lounge or Foot Loose services." The appointment date counts, not the
+  booking date, and the client's chosen area must match that day.
+- Discounts never stack. The larger one wins; on a tie the Weekly Deal wins, so a company keeps an earned
+  reward for later. (Today they can't meet: the deal is for massages, the corporate program for events.)
 - The discount comes off the total. The deposit never changes, so a discount can't bring the total
   below the deposit.
-- What was applied is copied onto the booking, so editing or deleting a special later changes nothing.
+- What was applied is copied onto the booking, so changing the settings later changes nothing.
 """
 import re
 import secrets
-from datetime import datetime
+from datetime import timedelta
 
 from .availability import to_local
-from .models import Booking, Company, Special, deposit_default_cents, get_float_setting, get_int_setting, get_setting, utcnow
+from .models import (Booking, Company, Service, db, deposit_default_cents, get_float_setting, get_int_setting,
+                     get_setting, utcnow)
 
 CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O or 1/I/L to misread
 USED = ("confirmed", "completed", "no_show", "payment_conflict")
@@ -35,49 +39,87 @@ def fmt_money(cents):
     return f"${cents / 100:,.2f}".replace(".00", "")
 
 
-# Specials
+# Weekly Deals
 
-def today_local():
-    return to_local(utcnow()).date()
-
-
-def special_on(day):
-    return Special.query.filter(Special.starts_on <= day, Special.ends_on >= day).first()
-
-
-def active_special():
-    """The special running today. Turns itself off once the end date has passed."""
-    return special_on(today_local())
+AREAS = {"boston": "Boston area", "south_coast": "South Coast", "other": "Other"}
+# Which area each day setting belongs to, and how her banner names it. South Coast first, as she wrote it.
+DEAL_AREAS = (("south_coast", "South Coast", "weekly_deal_south_coast_day"),
+              ("boston", "Boston", "weekly_deal_boston_day"))
+# 60- and 90-minute Sole Cleanse and Mama's Sole Relief only. Not the 120-minute session or events.
+DEAL_SERVICES = ("sole-cleanse-60", "sole-cleanse-90", "mamas-sole-relief-60", "mamas-sole-relief-90")
+DAYS = ("Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays")
+DEAL_KIND = "weekly_deal"
+DEAL_LABEL = "Weekly Deal"
 
 
-def special_for(service, start_at=None):
-    """The special that applies to a booking of this service, per the date-basis setting."""
-    if get_setting("special_date_basis") == "appointment":
-        if start_at is None:
-            return None
-        sp = special_on(to_local(start_at).date())
-    else:
-        sp = active_special()
-    return sp if sp and service.id in (sp.service_ids or []) else None
+def deal_on():
+    return get_setting("weekly_deal_enabled") == "1"
 
 
-def special_discount(sp, regular):
-    if sp.discount_type == "percent":
-        return pct_of(regular, sp.discount_value)
-    return sp.discount_value
+def deal_cents():
+    try:
+        return max(int(round(float(get_setting("weekly_deal_dollars")) * 100)), 0)
+    except ValueError:
+        return 3000
 
 
-def special_terms(sp):
-    return f"{sp.discount_value}% off" if sp.discount_type == "percent" else f"{fmt_money(sp.discount_value)} off"
+def deal_day(area):
+    """The weekday (0 = Monday) with a deal for this area, or None."""
+    for key, _, setting in DEAL_AREAS:
+        if key == area:
+            value = get_setting(setting)
+            return int(value) if value.isdigit() and int(value) <= 6 else None
+    return None
 
 
-def sale_price(sp, service):
-    """For the menu: the sale price per booking (or per hour), or None when it depends on hours."""
-    if sp.discount_type == "percent":
-        return service.price_cents - pct_of(service.price_cents, sp.discount_value)
-    if service.hourly:
-        return None  # a dollar amount comes off the whole booking, not each hour
-    return max(service.price_cents - sp.discount_value, 0)
+def deal_eligible(service):
+    return bool(service) and service.slug in DEAL_SERVICES
+
+
+def weekly_deal_for(service, area, start_at):
+    """Cents off for this service, area and appointment time (UTC), or 0."""
+    if not (deal_on() and deal_eligible(service) and start_at is not None):
+        return 0
+    day = deal_day(area)
+    return deal_cents() if day is not None and to_local(start_at).weekday() == day else 0
+
+
+def deal_dates(service, first, last, area=None):
+    """{"YYYY-MM-DD": [areas]} for days between first and last (local dates) with a deal for this service."""
+    if not (deal_on() and deal_eligible(service)):
+        return {}
+    days = {}
+    for key, _, _ in DEAL_AREAS:
+        if area and key != area:
+            continue
+        wd = deal_day(key)
+        if wd is None:
+            continue
+        d = first
+        while d <= last:
+            if d.weekday() == wd:
+                days.setdefault(d.isoformat(), []).append(key)
+            d += timedelta(days=1)
+    return days
+
+
+def deal_text():
+    """Her banner text, built from the settings. With the default settings it's exactly what she wrote."""
+    parts = []
+    for key, name, _ in DEAL_AREAS:
+        day = deal_day(key)
+        if day is not None:
+            parts.append((day, f"{DAYS[day]} {name}"))
+    if not (deal_on() and parts):
+        return None
+    days = "; ".join(p for _, p in sorted(parts))
+    return (f"{days}. {fmt_money(deal_cents())} off 60-minute & 90-minute sessions. "
+            "Not available for Recovery Lounge or Foot Loose services.")
+
+
+def deal_public():
+    text = deal_text()
+    return dict(text=text, amount_cents=deal_cents()) if text else None
 
 
 # Corporate program
@@ -149,35 +191,40 @@ def corporate_discount(company, service, addons, hours, regular):
 
 # Putting it together
 
-def price(service, addons, hours, regular, start_at=None, company=None):
+def price(service, addons, hours, regular, start_at=None, company=None, area=None):
     """The full breakdown for one booking. regular is the undiscounted total from quote()."""
     deposit = deposit_for(service, regular)
     room = max(regular - deposit, 0)  # the most any discount can take off
     options = []
-    sp = special_for(service, start_at)
-    if sp:
-        options.append((min(special_discount(sp, regular), room), 1, "special",
-                        f"{sp.title} ({special_terms(sp)})", sp.id))
+    deal = weekly_deal_for(service, area, start_at)
+    if deal:
+        options.append((min(deal, room), 1, DEAL_KIND, DEAL_LABEL))
     corp = corporate_discount(company, service, addons, hours, regular)
     if corp:
-        options.append((min(corp[0], room), 0, corp[1], corp[2], None))
+        options.append((min(corp[0], room), 0, corp[1], corp[2]))
     best = max(options, key=lambda o: (o[0], o[1]), default=None)
     if not best or best[0] <= 0:
-        best = (0, 0, None, None, None)
-    discount, _, kind, label, special_id = best
+        best = (0, 0, None, None)
+    discount, _, kind, label = best
     return dict(regular_cents=regular, discount_cents=discount, discount_kind=kind, discount_label=label,
-                special_id=special_id, total_cents=regular - discount, deposit_cents=deposit,
-                company_id=company.id if company else None)
+                total_cents=regular - discount, deposit_cents=deposit, company_id=company.id if company else None)
 
 
-# Public views
+def repriced(b, new_start):
+    """Pricing for booking b moved to new_start. The Weekly Deal is worked out again for the new date and the
+    booking's area; the regular price and deposit stay as booked. Corporate discounts and phone bookings
+    (where she set the total herself) don't change."""
+    keep = dict(regular_cents=b.regular, discount_cents=b.discount, discount_kind=b.discount_kind,
+                discount_label=b.discount_label, total_cents=b.total_cents)
+    if b.source == "manual" or b.discount_kind not in (None, DEAL_KIND):
+        return keep
+    service = db.session.get(Service, b.service_id) if b.service_id else None
+    room = max(b.regular - b.deposit_cents, 0)
+    cents = min(weekly_deal_for(service, b.area, new_start), room)
+    return dict(regular_cents=b.regular, discount_cents=cents, discount_kind=DEAL_KIND if cents else None,
+                discount_label=DEAL_LABEL if cents else None, total_cents=b.regular - cents)
 
-def special_public(sp):
-    if not sp:
-        return None
-    basis = get_setting("special_date_basis")
-    return dict(title=sp.title, description=sp.description, terms=special_terms(sp),
-                starts_on=sp.starts_on.isoformat(), ends_on=sp.ends_on.isoformat(),
-                ends_label=datetime.combine(sp.ends_on, datetime.min.time()).strftime("%A, %B %-d"),
-                starts_label=datetime.combine(sp.starts_on, datetime.min.time()).strftime("%B %-d"),
-                date_basis=basis, service_ids=sp.service_ids or [])
+
+def apply_pricing(b, p):
+    for key in ("regular_cents", "discount_cents", "discount_kind", "discount_label", "total_cents"):
+        setattr(b, key, p[key])

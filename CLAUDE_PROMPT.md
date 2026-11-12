@@ -27,10 +27,17 @@ Do not invent facts about her or the business: no reviews, testimonials, client 
 
 ## 3. Her text: intro and services
 
-**Intro (use on Home and Services):**
-> A sole to soul lasting experience. SoleScape Foot Spa & Massage tailors therapeutic mobile massages to your feet. Proper body movement is restored, managing chronic foot pain, providing tension relief and preventing risks of injury.
+**Home hero (updated Nov 12, 2026):**
+> Headline: **A complete sole to soul recovery experience.**
 >
-> All services are performed by your licensed massage therapist (LMT) at your home or workplace. All equipment is provided for your service.
+> SoleScape Foot Spa & Massage delivers mobile therapeutic foot care to restore movement, relieve chronic pain, and prevent injuries—right where you are.
+>
+> Tagline: **She travels to you**
+
+Use the hero paragraph as the Home meta description, and the headline plus paragraph as the Open Graph description.
+
+**Intro (Services page):**
+> A sole to soul lasting experience. All services are performed by your licensed massage therapist (LMT) at your home or workplace. All equipment is provided for your service.
 
 **Mobile services** (prices are exact; never change them unless told to):
 
@@ -39,14 +46,24 @@ Do not invent facts about her or the business: no reviews, testimonials, client 
 | Sole Cleanse | 60 min | $190 | 45-min full body massage, trigger point therapy, gentle stretch, firm pressure + 15-min foot massage, hot towels. | LMT arrives 30 minutes prior for setup. |
 | Sole Cleanse | 90 min | $225 | 60-min full body massage, trigger point therapy, firm pressure, gentle stretch + 15-min foot soak, 15-min foot massage, foot exfoliant, hot towels. | LMT arrives 30 minutes prior for setup. |
 | Sole Cleanse | 120 min | $300 | 90-min full body massage, trigger point therapy, hot stone therapy, firm pressure, gentle stretch + 15-min foot soak, 15-min foot massage, foot exfoliant, hot towels. | LMT arrives 30 minutes prior for setup. |
-| Mama's Sole Relief | 60 min | $190 | Full body massage alleviating weight-bearing joints, light to firm pressure + 15-min foot massage, hot towels. | 2nd & 3rd trimester clients. LMT arrives 30 minutes prior for setup. |
+| Mama's Sole Relief | 60 min | $190 | 45-minute full-body massage alleviating weight-bearing joints, light to firm pressure + 15-min foot massage, hot towels. | 2nd & 3rd trimester clients. LMT arrives 30 minutes prior for setup. |
 | Mama's Sole Relief | 90 min | $225 | 60-min full body massage alleviating weight-bearing joints, gentle trigger point therapy, light to firm pressure + 15-min foot soak, 15-min foot massage, foot exfoliant, hot towels. | 2nd & 3rd trimester clients. LMT arrives 30 minutes prior for setup. |
 | Recovery Lounge | per hour, 3-hour minimum | $190/hr | Therapeutic 15-minute or 20-minute massages in a specialized chair, fully clothed, improving mobility within your scalp, neck, back & shoulders. Convenient for corporate events, community events, and special events. | Minimum 3 hours, additional LMTs available upon request, arrives 30 minutes prior for setup. |
-| Foot Loose | per hour, 3-hour minimum | $190/hr | Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture. | Minimum 3 hours, additional licensed massage therapists available upon request, arrives 30 minutes prior for setup. |
+| Foot Loose | per hour, 3-hour minimum | $190/hr | Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture. Convenient for corporate events, community events, and special events. | Minimum 3 hours, additional licensed massage therapists available upon request, arrives 30 minutes prior for setup. |
 
 **Add-on:** Foot soaks, $50/hr, for Foot Loose only ("Add foot soaks $50/hr.").
 
 Group the services by family (Sole Cleanse, Mama's Sole Relief, Recovery Lounge, Foot Loose). Recovery Lounge and Foot Loose are **events**.
+
+On an existing database, the two Nov 12, 2026 description changes (Mama's Sole Relief 60 and Foot Loose) are applied on startup, but only where the old wording is still there unchanged, so her own admin edits are never overwritten.
+
+**Weekly Deals (her text, Nov 12, 2026):**
+> Weekly Deals: Mondays South Coast; Wednesdays Boston. $30 off 60-minute & 90-minute sessions. Not available for Recovery Lounge or Foot Loose services.
+
+- Eligible: the 60-minute and 90-minute sessions of Sole Cleanse and Mama's Sole Relief only. Not the 120-minute Sole Cleanse, Recovery Lounge or Foot Loose.
+- $30 off the total when the **appointment date** (not the booking date) is a Monday and the client's area is South Coast, or a Wednesday and the area is Boston. Rules are in section 8.
+- Show her text as a "Weekly Deals" banner on Home and Services. The server builds it from the Settings, so with the default settings it is exactly her text. Hide it when Weekly Deals are off.
+- This replaces the earlier generic "specials" feature, which is removed.
 
 ## 4. Her text: reservation policies
 
@@ -73,15 +90,16 @@ Credentials box, headed "About your LMT" (these restate her bio, so they're allo
 The header nav is Home, Services, About, Contact, plus a "Book now" button. Add a Shop link only when at least one product is active. Every page sets its own browser title ("Page | SoleScape Foot Spa & Massage") and meta description.
 
 1. **Home (`/`)**
-   - Hero: the headline "A sole to soul lasting experience." and her intro paragraph. Buttons: "Book an appointment" and "See services and prices". Under them, a short list of her three lines: all services by your LMT at your home or workplace, all equipment provided, LMT arrives 30 minutes prior for setup.
+   - Hero: the headline "A complete sole to soul recovery experience." and her paragraph (section 3). Under the paragraph and above the buttons, her line "She travels to you" on its own line, styled as a short highlighted tagline (display font, gold left rule on sage), not body text. Buttons: "Book an appointment" and "See services and prices". Under them, a short list of her three lines: all services by your LMT at your home or workplace, all equipment provided, LMT arrives 30 minutes prior for setup.
    - Hero image: `chair-boston.jpg`, framed in the map-pin shape from her logo (a CSS mask with a thin gold ring). This is the site's signature visual.
    - "How it works": 3 numbered steps (Book online and pay the $75 deposit → she comes to you, arriving 30 minutes early with all equipment → relax and pay the balance; reschedule once online with 24 hours' notice). *Written by us.*
+   - Her "Weekly Deals" banner (section 3) under the hero.
    - "Mobile services": one card per family showing her first description and "From $190" or "$190/hr". Each card links to that family on the Services page.
    - Photo gallery: foot-soak, hot-stones, back-massage, foot-massage, table-outdoors.
    - About teaser on espresso brown: her portrait, her heading and her first bio paragraph, and a "Read her story" button.
    - Closing call to action: "Wellness that comes to you." with buttons to Book and to Contact.
 2. **Services (`/services`)**
-   - Her intro, then "Mobile services" (massage families as cards, each length with its price and a Book button that opens `/book?service=<slug>`), with her note under each family.
+   - Her intro (section 3), the "Weekly Deals" banner near the top, then "Mobile services" (massage families as cards, each length with its price and a Book button that opens `/book?service=<slug>`), with her note under each family.
    - "Events" section on a sage background: "Convenient for corporate events, community events, and special events." plus the Recovery Lounge and Foot Loose cards and the foot soak add-on.
    - "Reservation policies" (section 4), with anchor `#policies`.
    - "Questions": an FAQ using `<details>`, with answers built only from facts in this brief. Cover where she comes, equipment, arrival time, the deposit, rescheduling, pregnancy (Mama's Sole Relief is for the 2nd and 3rd trimester) and events (3-hour minimum, extra LMTs on request). *Written by us.*
@@ -134,18 +152,27 @@ Add JSON-LD (`HealthAndBeautyBusiness`) to `index.html` with her name, phone, em
 **Booking flow on `/book`:**
 1. Choose a service, grouped by family.
 2. For hourly events, pick the number of hours (min 3, max 8), the optional add-on (foot soaks, $50/hr), and the checkbox "I'd like more than one therapist. Kerimah will confirm availability and pricing." That checkbox is a request only and isn't priced.
-3. Pick a date and time. A month calendar shows only days with openings, and the chosen day shows its open times. Show "Kerimah arrives at {time} to set up."
+3. Pick a date and time.
+   - First a required **Area** choice: "Boston area", "South Coast" or "Other". The Weekly Deal applies automatically when the day and area match.
+   - A month calendar shows only days with openings, and the chosen day shows its open times. Show "Kerimah arrives at {time} to set up."
+   - When the chosen service and area qualify for a Weekly Deal, mark those open days (Mondays for South Coast, Wednesdays for Boston) with a small "$30 off" tag. The server says which days qualify.
 4. Enter details:
    - Where: "My home" or "My workplace or event venue"
    - Street address (required), full name, email and mobile phone
    - Notes for parking or access
    - For Mama's Sole Relief, a required checkbox: "I'm in my 2nd or 3rd trimester."
    - Her policies list and a required checkbox: "I agree to the reservation policies".
-5. Pay the deposit. A sticky summary shows the total, "Deposit today", and "Due at appointment".
+5. Pay the deposit. A sticky summary shows the total, "Deposit today", and "Due at appointment". With a Weekly Deal it shows "Regular price", "Weekly Deal −$30" and the new total.
 
 **Rules that must hold:**
 - **Money:** store integer cents. The **server** calculates every total and deposit; never trust prices sent by the browser.
 - **Deposit:** a flat **$75** per reservation (an admin setting), capped at the total. A per-service override is optional.
+- **Weekly Deals:**
+  - The server alone decides and calculates the deal from the service, the area and the appointment date (in Boston time). Anything the browser sends about prices or discounts is ignored.
+  - The deposit stays $75 and is applied to the balance; a discount never takes the total below the deposit. Discounts never stack: if two could apply, the larger wins.
+  - Save on each booking the area, the regular price, whether the deal was applied (`discount_kind = "weekly_deal"`) and the amount, so later setting changes never alter past bookings.
+  - Rescheduling (by the client or by her in the admin) recalculates the deal for the new date and the booking's area. The client sees the new total (regular price, Weekly Deal line if any, total, deposit paid and balance) before confirming. Phone bookings, where she set the total herself, are not repriced.
+  - The summary, the confirmation page and the emails show the regular price, "Weekly Deal −$30" and the new total. Her emails also show the area.
 - **Calendar blocking:** each booking blocks the calendar from 30 minutes before the start (setup, adjustable per service) until the end. A travel buffer between bookings (default 30 min, an admin setting) applies between appointments, but not around time off.
 - **Hours:** setup and session must both fit inside working hours. Default hours: Mon, Tue and Thu 11:00–19:00; Wed 11:30–19:00; Fri and Sat 10:00–18:00; Sun closed. She edits them in the admin.
 - **Booking window:** minimum notice 24 hours, booking up to 90 days ahead, start times every 30 minutes. All are admin settings.
@@ -165,9 +192,9 @@ Add JSON-LD (`HealthAndBeautyBusiness`) to `index.html` with her name, phone, em
 Password sign-in using a server session cookie. The password comes from `ADMIN_PASSWORD`, compared with `hmac.compare_digest`. The admin has these screens:
 - **Calendar:**
   - A month grid with appointment counts and time-off days marked.
-  - Clicking a day lists its appointments: time, arrival time, service, hours, add-ons, client name, phone and email, home or workplace, address, notes, any extra-therapist request, and whether the client rescheduled or cancelled.
+  - Clicking a day lists its appointments: time, arrival time, service, hours, add-ons, client name, phone and email, home or workplace, address, the area the client chose (so she can check it against the address) with a "Weekly Deal" tag when it applied, notes, any extra-therapist request, and whether the client rescheduled or cancelled.
   - Actions: mark balance paid, mark completed, no-show, reschedule (with a collision check), cancel, and refund what's left of the deposit.
-  - She can also add a phone or text booking on any day.
+  - She can also add a phone or text booking on any day, with an optional area.
 - **Messages:** contact form messages, with an unread count and mark read/unread.
 - **Orders:** paid orders, with mark fulfilled and refund.
 - **Services and products:**
@@ -177,6 +204,7 @@ Password sign-in using a server session cookie. The password comes from `ADMIN_P
 - **Settings:**
   - Deposit amount ($), travel time, minimum notice, notice needed to reschedule, booking horizon and start-time step.
   - Sales tax % for taxable products, and the policies text (one per line, shown everywhere).
+  - Weekly Deals: an on/off switch, the dollars off (default $30), and which day goes with each area (South Coast: Monday, Boston area: Wednesday by default, or "No deal").
   - The private calendar feed link, with a warning not to share it.
 
 ## 10. Tech stack and commands
@@ -223,10 +251,12 @@ tests/test_app.py
 **Main API (all JSON under `/api`):**
 - Public:
   - `GET config` (payment mode, deposit, policies, hours, shop_open)
-  - `GET services`
-  - `GET availability?service=&hours=&addons=&month=YYYY-MM` (open days plus the quote) and `GET availability/day?...&date=` (open times). Both also accept `booking=<token>` for rescheduling.
+  - `GET services` (each service says whether it's eligible for Weekly Deals)
+  - `GET quote?service=&hours=&addons=&start_at=&area=` (regular price, discount, total and deposit, worked out by the server)
+  - `GET availability?service=&hours=&addons=&month=YYYY-MM` (open days, the quote, and `deal_days`: which days have a Weekly Deal for which area) and `GET availability/day?...&date=` (open times). Both also accept `booking=<token>` for rescheduling.
   - `POST bookings`, `GET bookings/<token>`, `GET bookings/<token>/calendar.ics`
   - `POST bookings/<token>/release`, `.../reschedule` and `.../cancel`
+  - `GET bookings/<token>/reschedule-quote?start_at=` (the new total before the client confirms a reschedule)
   - `POST messages`, `GET products`, `POST orders`, `GET orders/<token>`
   - `POST stripe/webhook`, `GET calendar/<secret>.ics`
 - Admin, under `/api/admin`:
@@ -255,7 +285,16 @@ Resize them (longest side about 1000–1200px, JPEG quality around 80) and **str
 ## 12. Tests (`pipenv run test` must pass)
 
 Cover at least:
-- Seeded prices match section 3.
+- Seeded prices and her Nov 12 wording match section 3. Service descriptions show on the Services page, the Home cards and the booking page.
+- Weekly Deals:
+  - $30 off only on Monday + South Coast or Wednesday + Boston, by appointment date.
+  - Only the 60- and 90-minute Sole Cleanse and Mama's Sole Relief.
+  - Area is required.
+  - The browser can't apply the discount.
+  - The deal is saved on the booking, and later setting changes don't alter it.
+  - Rescheduling recalculates it and shows the new total first.
+  - The emails show the lines.
+  - Settings are validated.
 - The $75 deposit and balance math.
 - Setup plus travel buffer: on a Tuesday, the first slot is 11:30 with arrival at 11:00. After booking it, the next open slot is 1:30 PM.
 - Hourly pricing: Foot Loose for 3 hours with soaks is $720. Under 3 hours is rejected.

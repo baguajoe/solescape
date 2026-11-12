@@ -23,6 +23,7 @@ function BookingCard({ b, reload, setError }) {
       <h4>{b.service_name}{b.hours ? `, ${b.hours} hrs` : ''}{b.addons.length ? ` + ${b.addons.map((a) => a.name).join(', ')}` : ''}</h4>
       <p>{b.customer_name}, <a href={`sms:${b.customer_phone}`}>{b.customer_phone}</a>{b.customer_email && <>, <a href={`mailto:${b.customer_email}`}>{b.customer_email}</a></>}</p>
       {b.address && <p>{b.location_type === 'workplace' ? 'Workplace' : 'Home'}: {b.address}</p>}
+      <p className="area-line">Area: {b.area_label || 'not given'}{b.weekly_deal_applied && <span className="tag deal-chip">Weekly Deal</span>}</p>
       {b.extra_therapists && <p className="tag-warn">Asked for additional therapists</p>}
       {b.reschedule_count > 0 && <p className="note">Rescheduled by the client</p>}
       {b.cancelled_by === 'client' && <p className="note">Cancelled by the client. Deposit kept.</p>}
@@ -52,7 +53,7 @@ function BookingCard({ b, reload, setError }) {
 }
 
 function NewBooking({ date, services, companies, onDone, setError }) {
-  const [f, setF] = useState({ name: '', phone: '', email: '', address: '', service_id: '', time: '11:00', deposit: '', company_id: '' });
+  const [f, setF] = useState({ name: '', phone: '', email: '', address: '', area: '', service_id: '', time: '11:00', deposit: '', company_id: '' });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   async function submit(e) {
     e.preventDefault(); setError('');
@@ -80,7 +81,16 @@ function NewBooking({ date, services, companies, onDone, setError }) {
         <label className="field"><span>Time</span><input type="time" value={f.time} onChange={set('time')} required /></label>
         <label className="field"><span>Deposit already collected ($)</span><input inputMode="decimal" value={f.deposit} onChange={set('deposit')} /></label>
       </div>
-      <label className="field"><span>Address</span><input value={f.address} onChange={set('address')} /></label>
+      <div className="two">
+        <label className="field"><span>Address</span><input value={f.address} onChange={set('address')} /></label>
+        <label className="field"><span>Area</span>
+          <select value={f.area} onChange={set('area')}>
+            <option value="">Not given</option>
+            <option value="boston">Boston area</option>
+            <option value="south_coast">South Coast</option>
+            <option value="other">Other</option>
+          </select></label>
+      </div>
       {companies.length > 0 && (
         <label className="field"><span>Corporate client (optional)</span>
           <select value={f.company_id} onChange={set('company_id')}>

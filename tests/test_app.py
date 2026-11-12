@@ -53,7 +53,8 @@ def first_slot(client, service=SVC, day=None, extra=""):
 
 def payload(start, **kw):
     base = dict(service=SVC, start_at=start, name="Ada Client", email="ada@example.com", phone="617-555-0100",
-                location_type="home", address="1 Main St, Boston MA", agreed_policy=True, addon_ids=[])
+                location_type="home", address="1 Main St, Boston MA", area="other", agreed_policy=True,
+                addon_ids=[])
     return {**base, **kw}
 
 

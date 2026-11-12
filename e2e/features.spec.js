@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-// Calendar blocking, weekly specials and the corporate program, clicked through as Kerimah and as a client.
+// Calendar blocking, Weekly Deals, her wording and the corporate program, clicked through as Kerimah and as a client.
 // Each test cleans up through the API so the desktop and phone runs don't see each other's data.
 
 const ADMIN_PASSWORD = 'e2e-password';
@@ -46,7 +46,8 @@ async function slotLabels(request, key, service = 'sole-cleanse-60') {
   return (await r.json()).slots.map((s) => s.label);
 }
 
-async function fillDetails(page) {
+async function fillDetails(page, area = 'Other') {
+  if (area) await page.getByLabel(area, { exact: true }).check();
   await page.getByLabel('Street address').fill('1 Main St, Boston MA');
   await page.getByLabel('Full name').fill('Ada Tester');
   await page.getByLabel('Email').fill('ada@example.com');
@@ -129,7 +130,7 @@ test.describe('calendar blocking', () => {
     const [slot] = (await (await request.get(`/api/availability/day?service=sole-cleanse-60&date=${key}`)).json()).slots;
     const booking = await request.post('/api/bookings', {
       data: { service: 'sole-cleanse-60', start_at: slot.start_at, name: 'Blocky Client', email: 'blocky@example.com', phone: '617-555-0199',
-        location_type: 'home', address: '9 Elm St, Quincy MA', agreed_policy: true, addon_ids: [] },
+        location_type: 'home', address: '9 Elm St, Quincy MA', area: 'other', agreed_policy: true, addon_ids: [] },
     });
     const { token } = await booking.json();
     await request.post(`/api/demo/pay/booking/${token}`);
@@ -152,64 +153,161 @@ test.describe('calendar blocking', () => {
   });
 });
 
-test.describe('weekly special', () => {
-  test.afterEach(async ({ request }) => {
-    const api = await adminApi(request);
-    const { specials } = await (await api.get('/api/admin/specials')).json();
-    for (const sp of specials) await api.delete(`/api/admin/specials/${sp.id}`);
-  });
+/** Clicks the first open day matching `selector` (this month or the next two), then its first time. */
+async function pickDay(page, selector) {
+  for (let i = 0; i < 3; i += 1) {
+    await expect(page.getByText('Checking the calendar…')).toHaveCount(0);
+    const days = page.locator(selector);
+    if (await days.count()) {
+      const label = await days.first().getAttribute('aria-label');
+      await days.first().click();
+      await page.locator('.slot').first().click();
+      return label;
+    }
+    await page.getByRole('button', { name: 'Next month' }).click();
+  }
+  throw new Error(`No open day matching ${selector}`);
+}
 
-  test('Kerimah creates a special; clients see it and get the discount', async ({ page }) => {
-    await signIn(page);
-    await adminTab(page, 'Specials');
-    await page.getByLabel('Title').fill('Fall special');
-    await page.getByLabel('Description (shown in the banner)').fill('Treat your feet this week.');
-    await page.getByLabel('Sole Cleanse, 60 minutes').check();
-    await page.getByLabel('Percent off', { exact: true }).fill('10');
-    await page.getByRole('button', { name: 'Save special' }).click();
-    await expect(page.getByRole('status')).toHaveText('Special saved.');
-    await expect(page.locator('.special-row')).toContainText('On now');
+const HER_DEAL = 'Weekly Deals: Mondays South Coast; Wednesdays Boston. $30 off 60-minute & 90-minute sessions. Not available for Recovery Lounge or Foot Loose services.';
+const HER_INTRO = 'SoleScape Foot Spa & Massage delivers mobile therapeutic foot care to restore movement, relieve chronic pain, and prevent injuries—right where you are.';
 
-    // Only one at a time
-    await page.getByLabel('Title').fill('Overlapping special');
-    await page.getByLabel('Sole Cleanse, 90 minutes').check();
-    await page.getByLabel('Percent off', { exact: true }).fill('5');
-    await page.getByRole('button', { name: 'Save special' }).click();
-    await expect(page.getByRole('alert')).toContainText('Only one special can run at a time');
-
+test.describe('her wording', () => {
+  test('new hero, travels-to-you tagline, Foot Loose and Mama\'s Sole Relief text', async ({ page }) => {
     await page.goto('/');
-    const banner = page.getByRole('complementary', { name: 'Special' });
-    await expect(banner).toContainText('Fall special');
-    await expect(banner).toContainText('Treat your feet this week.');
-    await expect(banner).toContainText('10% off');
+    await expect(page.locator('h1')).toHaveText('A complete sole to soul recovery experience.');
+    await expect(page.locator('.hero-lead')).toHaveText(HER_INTRO);
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', HER_INTRO);
+    await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', `A complete sole to soul recovery experience. ${HER_INTRO}`);
+    // Tagline sits under the paragraph and above the buttons; How it works is unchanged
+    const tagline = page.locator('.hero .tagline');
+    await expect(tagline).toHaveText('She travels to you');
+    const order = await page.locator('.hero-copy > *').evaluateAll((els) => els.map((e) => e.className));
+    expect(order.slice(0, 4)).toEqual(['', 'hero-lead', 'tagline', 'row']);
+    await expect(page.getByRole('heading', { name: 'She comes to you' })).toBeVisible();
+
+    // Service descriptions also show on the Home cards and the booking page
+    await expect(page.locator('.teaser', { hasText: 'Foot Loose' })).toContainText('Convenient for corporate events, community events, and special events.');
+    await page.goto('/book?service=mamas-sole-relief-60');
+    await expect(page.locator('.choice', { hasText: '60 minutes' }).filter({ hasText: 'weight-bearing' })).toContainText('45-minute full-body massage alleviating weight-bearing joints');
 
     await page.goto('/services');
-    await expect(page.getByRole('complementary', { name: 'Special' })).toContainText('Fall special');
-    const sixty = page.locator('#sole-cleanse li', { hasText: '60 minutes' });
-    await expect(sixty.locator('s')).toHaveText('$190');
-    await expect(sixty.locator('.sale')).toHaveText('$171');
-    await expect(page.locator('#sole-cleanse li', { hasText: '90 minutes' }).locator('s')).toHaveCount(0);
+    await expect(page.locator('#foot-loose')).toContainText('Foot massages for overworked feet, reducing chronic tension throughout your body + improving posture. Convenient for corporate events, community events, and special events.');
+    await expect(page.locator('#mama-s-sole-relief li', { hasText: '60 minutes' })).toContainText('45-minute full-body massage alleviating weight-bearing joints, light to firm pressure + 15-min foot massage, hot towels.');
+  });
+});
+
+test.describe('Weekly Deals', () => {
+  test.afterEach(async ({ request }) => {
+    const api = await adminApi(request);
+    await api.put('/api/admin/settings', { data: { weekly_deal_enabled: '1', weekly_deal_dollars: '30', weekly_deal_south_coast_day: '0', weekly_deal_boston_day: '2' } });
+  });
+
+  test('banner on Home and Services; calendar tags follow service and area', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('complementary', { name: 'Weekly Deals' })).toHaveText(HER_DEAL);
+    await page.goto('/services');
+    await expect(page.getByRole('complementary', { name: 'Weekly Deals' })).toHaveText(HER_DEAL);
 
     await page.goto('/book?service=sole-cleanse-60');
+    await expect(page.getByText('Checking the calendar…')).toHaveCount(0);
+    await expect(page.locator('.deal-tag')).toHaveCount(0); // no area chosen yet
+    await page.getByLabel('South Coast', { exact: true }).check();
+    await expect(page.locator('.cal-day.deal').first()).toBeVisible();
+    for (const label of await page.locator('.cal-day.deal').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))) {
+      expect(label).toMatch(/^Monday, .*Weekly Deal \$30 off$/);
+    }
+    await expect(page.locator('.cal-day.deal .deal-tag').first()).toHaveText('$30 off');
+    await page.getByLabel('Boston area', { exact: true }).check();
+    for (const label of await page.locator('.cal-day.deal').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))) {
+      expect(label).toMatch(/^Wednesday, /);
+    }
+    await page.getByLabel('Other', { exact: true }).check();
+    await expect(page.locator('.cal-day.deal')).toHaveCount(0);
+
+    // Not for the 120-minute session or events
+    await page.goto('/book?service=sole-cleanse-120');
+    await page.getByLabel('South Coast', { exact: true }).check();
+    await expect(page.getByText('Checking the calendar…')).toHaveCount(0);
+    await expect(page.locator('.cal-day.deal')).toHaveCount(0);
+    await page.goto('/book?service=foot-loose');
+    await page.getByLabel('Boston area', { exact: true }).check();
+    await expect(page.getByText('Checking the calendar…')).toHaveCount(0);
+    await expect(page.locator('.cal-day.deal')).toHaveCount(0);
+  });
+
+  test('book a deal day, see it everywhere, reschedule off it and see the new total first', async ({ page }) => {
+    await page.goto('/book?service=sole-cleanse-60');
+    await page.getByLabel('South Coast', { exact: true }).check();
+    const dayLabel = await pickDay(page, '.cal-day.deal:not([disabled])');
     const summary = page.locator('.summary');
     await expect(summary).toContainText('Regular price$190');
-    await expect(summary).toContainText('Fall special (10% off)−$19');
-    await expect(summary).toContainText('Total$171');
+    await expect(summary).toContainText('Weekly Deal−$30');
+    await expect(summary).toContainText('Total$160');
     await expect(summary).toContainText('Deposit today$75');
-    await expect(summary).toContainText('Due at appointment$96');
-    await pickFirstSlot(page);
-    await fillDetails(page);
+    await expect(summary).toContainText('Due at appointment$85');
+    await expect(summary).toContainText('Area: South Coast');
+    await fillDetails(page, null);
     await page.getByRole('button', { name: 'Pay $75 deposit' }).click();
     await payDemo(page);
 
-    const receipt = page.locator('.receipt');
+    const receipt = page.locator('.receipt').first();
     await expect(receipt).toContainText('Regular price$190');
-    await expect(receipt).toContainText('Fall special (10% off)−$19');
-    await expect(receipt).toContainText('Total$171');
+    await expect(receipt).toContainText('Weekly Deal−$30');
+    await expect(receipt).toContainText('Total$160');
     await expect(receipt).toContainText('Deposit paid$75');
-    await expect(receipt).toContainText('Due at appointment$96');
-    await page.getByRole('button', { name: 'Cancel appointment' }).click();
-    await page.locator('.panel').getByRole('button', { name: 'Cancel appointment' }).click();
+    await expect(receipt).toContainText('Due at appointment$85');
+    await expect(receipt).toContainText('Area: South Coast');
+    const token = page.url().split('/booking/')[1];
+
+    // Kerimah sees the area in her calendar
+    const admin = await page.context().newPage();
+    await signIn(admin);
+    const [, monthDay] = dayLabel.match(/^\w+, (\w+ \d+)/);
+    const year = new Date().getFullYear();
+    let date = new Date(`${monthDay}, ${year} 12:00`);
+    if (date < new Date(Date.now() - 86400000)) date = new Date(`${monthDay}, ${year + 1} 12:00`);
+    await openAdminDay(admin, date);
+    const card = admin.locator('.agenda', { hasText: 'Ada Tester' }).first();
+    await expect(card).toContainText('Area: South Coast');
+    await expect(card).toContainText('Weekly Deal');
+    await admin.close();
+
+    // Reschedule to a day without the deal: the new total shows before confirming
+    await page.getByRole('button', { name: 'Reschedule' }).click();
+    await pickDay(page, '.panel .cal-day:not([disabled]):not(.deal)');
+    const preview = page.locator('.new-total');
+    await expect(preview).toContainText('Your new total');
+    await expect(preview).toContainText('from $160 to $190');
+    await expect(preview).toContainText('Total$190');
+    await expect(preview).toContainText('Due at appointment$115');
+    await page.getByRole('button', { name: /^Move to/ }).click();
+    await expect(page.getByRole('status')).toContainText('has been moved');
+    await expect(page.locator('.receipt')).toContainText('Total$190');
+    await expect(page.locator('.receipt')).not.toContainText('Weekly Deal');
+
+    await page.request.post(`/api/bookings/${token}/cancel`);
+  });
+
+  test('Kerimah turns Weekly Deals off and changes the amount in Settings', async ({ page }) => {
+    await signIn(page);
+    await adminTab(page, 'Settings');
+    const panel = page.locator('form', { has: page.getByRole('heading', { name: 'Weekly Deals' }) });
+    await expect(panel.getByLabel('South Coast day')).toHaveValue('0');
+    await expect(panel.getByLabel('Boston area day')).toHaveValue('2');
+    await panel.getByLabel('Dollars off').fill('25');
+    await panel.getByRole('button', { name: 'Save Weekly Deals' }).click();
+    await expect(panel.getByRole('button', { name: 'Settings saved' })).toBeVisible();
+    await page.goto('/');
+    await expect(page.getByRole('complementary', { name: 'Weekly Deals' })).toContainText('$25 off 60-minute & 90-minute sessions.');
+
+    await page.goto('/admin/settings');
+    await panel.getByLabel('Turn on Weekly Deals').uncheck();
+    await panel.getByRole('button', { name: 'Save Weekly Deals' }).click();
+    await expect(panel.getByRole('button', { name: 'Settings saved' })).toBeVisible();
+    await page.goto('/');
+    await expect(page.locator('h1')).toBeVisible();
+    await expect(page.getByRole('complementary', { name: 'Weekly Deals' })).toHaveCount(0);
   });
 });
 

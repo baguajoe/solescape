@@ -11,7 +11,7 @@ from .availability import (BLOCKING, iso_utc, date_label, lock_calendar, month_b
                            recurring_occurrences, still_free, time_label, to_local, to_utc)
 from .extensions import limiter
 from .models import (AddOn, Booking, Company, DEFAULT_SETTINGS, Message, Order, Product, RecurringBlock, Service,
-                     Special, TimeOff, WeeklyHours, db, deposit_default_cents, get_setting, set_setting, utcnow)
+                     TimeOff, WeeklyHours, db, deposit_default_cents, get_setting, set_setting, utcnow)
 from .public import clean, contact_error, fail, feed_token
 from .serializers import (addon_json, booking_admin, order_admin, product_json, service_json)
 
@@ -145,6 +145,9 @@ def manual_booking():
         return fail("Check the date, time and amounts.")
     if minutes <= 0:
         return fail("Enter how many minutes this appointment takes.", field="duration_min")
+    area = clean(data, "area", 20)
+    if area and area not in pricing.AREAS:
+        return fail("Choose Boston area, South Coast or Other.", field="area")
     company = db.session.get(Company, int(data.get("company_id") or 0)) if data.get("company_id") else None
     if data.get("company_id") and not company:
         return fail("Company not found.", field="company_id")
@@ -157,7 +160,7 @@ def manual_booking():
     b = Booking(service_id=s.id, service_name=s.name, addons=[], block_start_at=block, start_at=start, end_at=end,
                 status="confirmed", hours=minutes // 60 if s.hourly else None,
                 customer_name=clean(data, "name"), customer_email=clean(data, "email", 160).lower(),
-                customer_phone=clean(data, "phone", 40), location_type="home",
+                customer_phone=clean(data, "phone", 40), location_type="home", area=area or None,
                 address=clean(data, "address", 400), notes=clean(data, "notes", 1000), total_cents=total,
                 deposit_cents=deposit, deposit_paid_cents=deposit, deposit_paid_at=utcnow() if deposit else None,
                 source="manual", regular_cents=total, discount_cents=0,
@@ -201,6 +204,7 @@ def update_booking(bid):
             db.session.rollback()
             return fail("That overlaps another appointment, its setup or travel time.", 409)
         b.block_start_at, b.start_at, b.end_at = block, start, end
+        pricing.apply_pricing(b, pricing.repriced(b, start))  # Weekly Deal follows the new date
         if b.status == "payment_conflict":
             b.status = "confirmed"
     db.session.commit()
@@ -527,9 +531,12 @@ def update_settings():
                "hold_min": (35, 120), "tax_percent": (0, 25)}
     numeric.update(corporate_percent=(1, 100), corporate_every_n=(1, 100), corporate_nth_percent=(1, 100),
                    corporate_nth_hours=(1, 12))
-    choices = {"special_date_basis": ("booking", "appointment"), "corporate_enabled": ("0", "1"),
+    numeric.update(weekly_deal_dollars=(1, 500))
+    days = ("",) + tuple(str(d) for d in range(7))
+    choices = {"weekly_deal_enabled": ("0", "1"), "weekly_deal_south_coast_day": days,
+               "weekly_deal_boston_day": days, "corporate_enabled": ("0", "1"),
                "corporate_reward_type": ("percent", "nth"), "corporate_nth_reward": ("percent", "hours")}
-    labels = {"corporate_percent": "The corporate discount", "corporate_every_n": "The number of events",
+    labels = {"weekly_deal_dollars": "The Weekly Deal discount ($)", "corporate_percent": "The corporate discount", "corporate_every_n": "The number of events",
               "corporate_nth_percent": "The reward discount", "corporate_nth_hours": "The free hours"}
     for key, value in data.items():
         if key not in DEFAULT_SETTINGS:
@@ -537,7 +544,7 @@ def update_settings():
         if key in choices:
             value = str(value)
             if value not in choices[key]:
-                return fail(f"{key} isn't a valid choice.")
+                return fail(f"{labels.get(key, key)} isn't a valid choice.")
         if key in numeric:
             low, high = numeric[key]
             try:
@@ -626,94 +633,3 @@ def update_company(cid):
         return fail(err[0], field=err[1])
     db.session.commit()
     return jsonify(company_json(c, history=True))
-
-
-# Specials
-
-def special_json(sp):
-    today = to_local(utcnow()).date()
-    state = "active" if sp.starts_on <= today <= sp.ends_on else ("ended" if sp.ends_on < today else "scheduled")
-    return dict(id=sp.id, title=sp.title, description=sp.description, service_ids=sp.service_ids or [],
-                discount_type=sp.discount_type, discount_value=sp.discount_value, terms=pricing.special_terms(sp),
-                starts_on=sp.starts_on.isoformat(), ends_on=sp.ends_on.isoformat(), state=state,
-                used_count=Booking.query.filter(Booking.special_id == sp.id,
-                                                Booking.status.in_(pricing.USED)).count())
-
-
-@bp.get("/specials")
-@admin_required
-def specials():
-    rows = Special.query.order_by(Special.starts_on.desc()).all()
-    return jsonify(specials=[special_json(sp) for sp in rows], date_basis=get_setting("special_date_basis"))
-
-
-def _apply_special(sp, data):
-    title = clean(data, "title", 160)
-    if len(title) < 2:
-        return "Enter a title.", "title"
-    valid = {s.id for s in Service.query.all()}
-    ids = sorted({int(x) for x in (data.get("service_ids") or []) if str(x).isdigit() and int(x) in valid})
-    if not ids:
-        return "Choose at least one service.", "service_ids"
-    kind = data.get("discount_type")
-    if kind not in ("percent", "amount"):
-        return "Choose a percent or a dollar amount off.", "discount_type"
-    try:
-        value = float(data.get("discount_value"))
-        starts_on, ends_on = date.fromisoformat(clean(data, "starts_on")), date.fromisoformat(clean(data, "ends_on"))
-    except (TypeError, ValueError):
-        return "Enter the discount, a start date and an end date.", "discount_value"
-    if kind == "percent" and not 1 <= value <= 90:
-        return "Use a percent between 1 and 90.", "discount_value"
-    if kind == "amount" and not 1 <= value <= 1000:
-        return "Use a dollar amount between $1 and $1,000.", "discount_value"
-    if ends_on < starts_on:
-        return "The end date has to be on or after the start date.", "ends_on"
-    clash = Special.query.filter(Special.starts_on <= ends_on, Special.ends_on >= starts_on,
-                                 Special.id != (sp.id or 0)).first()
-    if clash:
-        return (f"“{clash.title}” runs {clash.starts_on:%B %-d} to {clash.ends_on:%B %-d}. Only one special "
-                "can run at a time, so pick dates that don't overlap or change that special first."), "starts_on"
-    sp.title, sp.description, sp.service_ids = title, clean(data, "description", 2000), ids
-    sp.discount_type = kind
-    sp.discount_value = int(round(value)) if kind == "percent" else int(round(value * 100))
-    sp.starts_on, sp.ends_on = starts_on, ends_on
-    return None
-
-
-@bp.post("/specials")
-@admin_required
-def create_special():
-    sp = Special()
-    err = _apply_special(sp, request.get_json(silent=True) or {})
-    if err:
-        return fail(err[0], field=err[1])
-    db.session.add(sp)
-    db.session.commit()
-    return jsonify(special_json(sp)), 201
-
-
-@bp.patch("/specials/<int:sid>")
-@admin_required
-def update_special(sid):
-    sp = db.session.get(Special, sid)
-    if not sp:
-        return fail("Special not found.", 404)
-    err = _apply_special(sp, request.get_json(silent=True) or {})
-    if err:
-        db.session.rollback()
-        return fail(err[0], field=err[1])
-    db.session.commit()
-    return jsonify(special_json(sp))
-
-
-@bp.delete("/specials/<int:sid>")
-@admin_required
-def delete_special(sid):
-    """Past bookings keep the discount they got: it's copied onto each booking."""
-    sp = db.session.get(Special, sid)
-    if not sp:
-        return fail("Special not found.", 404)
-    db.session.delete(sp)
-    db.session.commit()
-    return jsonify(ok=True)

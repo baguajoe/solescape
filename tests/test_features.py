@@ -1,9 +1,8 @@
-"""Calendar blocking, the corporate loyalty program and weekly specials."""
-from datetime import date, timedelta
+"""Calendar blocking and the corporate loyalty program. Weekly Deals are in test_weekly_deals.py."""
+from datetime import timedelta
 
 from sqlalchemy import text
 
-from api import notify
 from api.models import Booking, add_missing_columns, db
 from tests.test_app import admin, app, book_and_pay, client, day_slots, first_slot, next_weekday, payload  # noqa: F401
 
@@ -104,119 +103,6 @@ def test_owner_booking_respects_weekly_block(client):
     assert client.post("/api/admin/bookings", json={**body, "start_local": f"{day}T16:00"}).status_code == 201
 
 
-# 3. Specials
-
-def service_ids(client, *slugs):
-    rows = {s["slug"]: s["id"] for s in client.get("/api/services").get_json()["services"]}
-    return [rows[s] for s in slugs]
-
-
-def make_special(client, slugs=("sole-cleanse-60",), kind="percent", value=10, start=None, end=None, title="Fall special"):
-    start = start or date.today() - timedelta(days=1)
-    end = end or date.today() + timedelta(days=6)
-    return client.post("/api/admin/specials", json=dict(
-        title=title, description="Her text about the special.", service_ids=service_ids(client, *slugs),
-        discount_type=kind, discount_value=value, starts_on=str(start), ends_on=str(end)))
-
-
-def test_special_shows_and_applies(client):
-    admin(client)
-    assert client.get("/api/config").get_json()["special"] is None
-    assert make_special(client).status_code == 201
-    cfg = client.get("/api/config").get_json()["special"]
-    assert cfg["title"] == "Fall special" and cfg["description"] == "Her text about the special." and cfg["terms"] == "10% off"
-    menu = {s["slug"]: s for s in client.get("/api/services").get_json()["services"]}
-    assert menu["sole-cleanse-60"]["sale"]["price_cents"] == 17100
-    assert "sale" not in menu["sole-cleanse-90"]
-
-    token = book_and_pay(client, first_slot(client))
-    b = client.get(f"/api/bookings/{token}").get_json()
-    assert (b["regular_cents"], b["discount_cents"], b["total_cents"]) == (19000, 1900, 17100)
-    assert b["discount_label"] == "Fall special (10% off)"
-    assert (b["deposit_paid_cents"], b["balance_cents"]) == (7500, 9600)  # deposit unchanged, applied to balance
-
-    other = book_and_pay(client, first_slot(client, "sole-cleanse-90"), service="sole-cleanse-90")
-    assert client.get(f"/api/bookings/{other}").get_json()["discount_cents"] == 0
-
-
-def test_quote_endpoint_breaks_down_price(client):
-    admin(client)
-    make_special(client, kind="amount", value=25)
-    q = client.get("/api/quote?service=sole-cleanse-60").get_json()
-    assert (q["regular_cents"], q["discount_cents"], q["total_cents"], q["deposit_cents"]) == (19000, 2500, 16500, 7500)
-    assert q["discount_label"] == "Fall special ($25 off)"
-
-
-def test_special_never_takes_total_below_deposit(client):
-    admin(client)
-    make_special(client, kind="amount", value=500)
-    q = client.get("/api/quote?service=sole-cleanse-60").get_json()
-    assert (q["total_cents"], q["deposit_cents"], q["discount_cents"]) == (7500, 7500, 11500)
-
-
-def test_only_one_special_at_a_time(client):
-    admin(client)
-    assert make_special(client).status_code == 201
-    r = make_special(client, title="Overlap", start=date.today() + timedelta(days=3), end=date.today() + timedelta(days=20))
-    assert r.status_code == 400 and "Only one special" in r.get_json()["error"]
-    later = make_special(client, title="Winter", start=date.today() + timedelta(days=7),
-                         end=date.today() + timedelta(days=14))
-    assert later.status_code == 201 and later.get_json()["state"] == "scheduled"
-
-
-def test_special_turns_off_after_end_date(client):
-    admin(client)
-    make_special(client, start=date.today() - timedelta(days=8), end=date.today() - timedelta(days=1))
-    assert client.get("/api/config").get_json()["special"] is None
-    assert client.get("/api/quote?service=sole-cleanse-60").get_json()["discount_cents"] == 0
-    assert client.get("/api/admin/specials").get_json()["specials"][0]["state"] == "ended"
-
-
-def test_special_by_appointment_date(client):
-    admin(client)
-    assert client.put("/api/admin/settings", json={"special_date_basis": "appointment"}).status_code == 200
-    day = next_weekday(TUESDAY, 2)
-    make_special(client, start=day, end=day + timedelta(days=2))  # starts in the future
-    inside, outside = first_slot(client, day=day), first_slot(client, day=next_weekday(TUESDAY, 4))
-    assert client.get(f"/api/quote?service=sole-cleanse-60&start_at={inside}").get_json()["discount_cents"] == 1900
-    assert client.get(f"/api/quote?service=sole-cleanse-60&start_at={outside}").get_json()["discount_cents"] == 0
-    token = book_and_pay(client, inside)
-    assert client.get(f"/api/bookings/{token}").get_json()["total_cents"] == 17100
-    assert client.put("/api/admin/settings", json={"special_date_basis": "someday"}).status_code == 400
-
-
-def test_changing_a_special_keeps_past_bookings(client):
-    admin(client)
-    sid = make_special(client).get_json()["id"]
-    token = book_and_pay(client, first_slot(client))
-    body = dict(title="Renamed", description="", service_ids=service_ids(client, "sole-cleanse-60"),
-                discount_type="percent", discount_value=50, starts_on=str(date.today()),
-                ends_on=str(date.today() + timedelta(days=2)))
-    assert client.patch(f"/api/admin/specials/{sid}", json=body).status_code == 200
-    b = client.get(f"/api/bookings/{token}").get_json()
-    assert (b["total_cents"], b["discount_label"]) == (17100, "Fall special (10% off)")
-    client.delete(f"/api/admin/specials/{sid}")
-    assert client.get(f"/api/bookings/{token}").get_json()["total_cents"] == 17100
-
-
-def test_special_validation(client):
-    admin(client)
-    assert make_special(client, slugs=()).status_code == 400
-    assert make_special(client, value=95).status_code == 400
-    assert make_special(client, start=date.today() + timedelta(days=5), end=date.today()).status_code == 400
-    assert client.get("/api/admin/specials").get_json()["specials"] == []
-
-
-def test_confirmation_email_shows_discount_lines(client, monkeypatch):
-    sent = []
-    monkeypatch.setattr(notify, "send", lambda to, subject, body: sent.append(body))
-    admin(client)
-    make_special(client)
-    book_and_pay(client, first_slot(client))
-    assert "Regular price: $190.00\nFall special (10% off): -$19.00\nTotal: $171.00\n" in sent[0]
-    assert "Total: $171.00" in sent[1]  # her copy
-
-
 # 2. Corporate loyalty program
 
 def company(client, **kw):
@@ -298,21 +184,6 @@ def test_inactive_company_code_stops_working(client):
     assert book_event(client, c["code"]).get_json()["field"] == "corporate_code"
 
 
-def test_special_and_corporate_never_stack(client):
-    admin(client)
-    c = company(client)
-    corporate(client, corporate_percent="10")
-    sid = make_special(client, slugs=("foot-loose",), value=20).get_json()["id"]
-    b = pay(client, book_event(client, c["code"]))
-    assert (b["discount_cents"], b["discount_label"]) == (11400, "Fall special (20% off)")
-    client.delete(f"/api/admin/specials/{sid}")
-    make_special(client, slugs=("foot-loose",), value=5)
-    b = pay(client, book_event(client, c["code"], weeks=2))
-    assert (b["discount_cents"], b["discount_label"]) == (5700, "Corporate rate (10% off)")
-    history = client.get("/api/admin/companies").get_json()["companies"][0]["bookings"]
-    assert len(history) == 2  # both linked to the company, whichever discount won
-
-
 def test_reward_after_n_completed_events(client):
     admin(client)
     c = company(client)
@@ -364,7 +235,6 @@ def test_corporate_settings_validation(client):
 
 def test_companies_need_admin(client):
     assert client.get("/api/admin/companies").status_code == 401
-    assert client.get("/api/admin/specials").status_code == 401
     assert client.post("/api/admin/recurring-blocks", json={}).status_code == 401
 
 

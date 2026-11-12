@@ -15,6 +15,7 @@ export default function BookingDone({ config }) {
   const [pick, setPick] = useState(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [newPrice, setNewPrice] = useState(null);
 
   useEffect(() => {
     api(`/bookings/${token}`).then(setB).catch((e) => setError(e.status === 404 ? 'That appointment could not be found.' : e.message));
@@ -37,6 +38,16 @@ export default function BookingDone({ config }) {
     } catch (e) { setError(e.message); }
     setBusy(false);
   }
+
+  // The server works out the new total for the picked time (the Weekly Deal depends on the day)
+  useEffect(() => {
+    setNewPrice(null);
+    if (!pick) return undefined;
+    let live = true;
+    api(`/bookings/${token}/reschedule-quote?start_at=${encodeURIComponent(pick.start_at)}`)
+      .then((r) => live && setNewPrice(r)).catch((e) => live && setError(e.message));
+    return () => { live = false; };
+  }, [pick?.start_at]);
 
   if (!b) return <div className="page narrow">{error ? <p className="error" role="alert">{error}</p> : <p>Loading your appointment…</p>}</div>;
 
@@ -65,6 +76,7 @@ export default function BookingDone({ config }) {
         {b.addons.map((a) => <p key={a.name}>+ {a.name}</p>)}
         <p>{b.date_label}<br />{b.time_label} to {b.end_time_label}</p>
         <p>Kerimah arrives at {b.arrival_label} to set up at {b.address}.</p>
+        {b.area_label && <p>Area: {b.area_label}</p>}
         <PriceLines regular={b.regular_cents} discount={b.discount_cents} label={b.discount_label} total={b.total_cents}
           deposit={b.deposit_paid_cents} depositLabel="Deposit paid" due={b.balance_cents} />
       </div>
@@ -88,9 +100,17 @@ export default function BookingDone({ config }) {
         <section className="panel">
           <h2>Choose a new time</h2>
           <p>Your deposit transfers to the new time. You can do this once.</p>
-          <SlotPicker query={`booking=${token}`} picked={pick} onPick={setPick} onError={(e) => setError(e.message)} />
+          <SlotPicker query={`booking=${token}`} area={b.area} picked={pick} onPick={setPick} onError={(e) => setError(e.message)} />
+          {pick && newPrice && (
+            <div className="receipt new-total" aria-live="polite">
+              <h3>{newPrice.changed ? 'Your new total' : 'Your total stays the same'}</h3>
+              {newPrice.changed && <p className="note">Weekly Deals depend on the appointment day, so moving changes your total from {money(b.total_cents)} to {money(newPrice.total_cents)}.</p>}
+              <PriceLines regular={newPrice.regular_cents} discount={newPrice.discount_cents} label={newPrice.discount_label}
+                total={newPrice.total_cents} deposit={newPrice.deposit_paid_cents} depositLabel="Deposit paid" due={newPrice.balance_cents} />
+            </div>
+          )}
           <div className="row">
-            <button className="btn" disabled={!pick || busy}
+            <button className="btn" disabled={!pick || !newPrice || busy}
               onClick={() => act('reschedule', { start_at: pick.start_at }, 'Your appointment has been moved. A confirmation is on its way.')}>
               {pick ? `Move to ${pick.label}` : 'Choose a time'}
             </button>

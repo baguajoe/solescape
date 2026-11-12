@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
 const FIELDS = [
   ['deposit_dollars', 'Deposit per reservation ($)'],
   ['buffer_min', 'Travel time between appointments (minutes)'],
@@ -39,18 +41,37 @@ export default function AdminSettings() {
           ))}
         </div>
         <label className="field"><span>Reservation policies (one per line)</span><textarea rows="7" value={s.policies} onChange={set('policies')} /></label>
-        <label className="field"><span>Specials apply to</span>
-          <select value={s.special_date_basis} onChange={set('special_date_basis')}>
-            <option value="booking">Bookings made during the special's dates</option>
-            <option value="appointment">Appointments that fall on the special's dates</option>
-          </select></label>
         {error && <p className="error" role="alert">{error}</p>}
         <button className="btn btn-small">{saved ? 'Settings saved' : 'Save settings'}</button>
       </form>
 
+      <form className="panel" onSubmit={save} aria-labelledby="deal-heading">
+        <h2 id="deal-heading">Weekly Deals</h2>
+        <p className="note">For 60-minute and 90-minute Sole Cleanse and Mama's Sole Relief sessions. Not the 120-minute session, Recovery Lounge or Foot Loose. The deal comes off automatically when the appointment day matches the area the client picks. The deposit stays the same.</p>
+        <label className="check">
+          <input type="checkbox" checked={s.weekly_deal_enabled === '1'} onChange={(e) => { setSaved(false); setS({ ...s, weekly_deal_enabled: e.target.checked ? '1' : '0' }); }} />
+          <span>Turn on Weekly Deals</span>
+        </label>
+        <div className="two">
+          <label className="field"><span>Dollars off</span><input inputMode="decimal" value={s.weekly_deal_dollars} onChange={set('weekly_deal_dollars')} /></label>
+        </div>
+        <div className="two">
+          {[['weekly_deal_south_coast_day', 'South Coast day'], ['weekly_deal_boston_day', 'Boston area day']].map(([k, label]) => (
+            <label className="field" key={k}><span>{label}</span>
+              <select value={s[k]} onChange={set(k)}>
+                <option value="">No deal</option>
+                {DAYS.map((d, i) => <option key={d} value={String(i)}>{d}</option>)}
+              </select></label>
+          ))}
+        </div>
+        <p className="note">Bookings keep the deal they got. If a client reschedules, the deal is worked out again for the new day, and they see the new total before they confirm.</p>
+        {error && <p className="error" role="alert">{error}</p>}
+        <button className="btn btn-small">{saved ? 'Settings saved' : 'Save Weekly Deals'}</button>
+      </form>
+
       <form className="panel" onSubmit={save} aria-labelledby="corp-heading">
         <h2 id="corp-heading">Corporate loyalty program</h2>
-        <p className="note">For Recovery Lounge and Foot Loose. Companies and their codes are on the <Link to="/admin/corporate">Corporate clients</Link> page. A special and a corporate discount never add together: the client gets whichever is larger.</p>
+        <p className="note">For Recovery Lounge and Foot Loose. Companies and their codes are on the <Link to="/admin/corporate">Corporate clients</Link> page. Discounts never add together: the client gets whichever is larger.</p>
         <label className="check">
           <input type="checkbox" checked={s.corporate_enabled === '1'} onChange={(e) => { setSaved(false); setS({ ...s, corporate_enabled: e.target.checked ? '1' : '0' }); }} />
           <span>Turn on the corporate program</span>

@@ -20,6 +20,7 @@ bp = Blueprint("public", __name__, url_prefix="/api")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 TEXT_HER = "Text 617.297.8564"
 CODE_INVALID = "That corporate code isn't valid. Check it with your company, or leave it blank."
+AREA_MISSING = "Choose your area: Boston area, South Coast or Other."
 
 
 class QuoteError(ValueError):
@@ -97,7 +98,7 @@ def config():
         notice_hours=get_int_setting("notice_hours"),
         lead_hours=get_int_setting("lead_hours"),
         shop_open=Product.query.filter_by(active=True).count() > 0,
-        special=pricing.special_public(pricing.active_special()),
+        weekly_deal=pricing.deal_public(),
         corporate=dict(description=get_setting("corporate_description").strip()) if pricing.corporate_live() else None,
         hours=[dict(weekday=d, opens=hours[d].opens, closes=hours[d].closes) for d in sorted(hours)],
     )
@@ -107,14 +108,8 @@ def config():
 def services():
     rows = Service.query.filter_by(active=True).order_by(Service.sort_order).all()
     addons = AddOn.query.filter_by(active=True).all()
-    sp = pricing.active_special()
-    out = []
-    for s in rows:
-        row = service_json(s)
-        if sp and s.id in (sp.service_ids or []) and s.price_cents:
-            row["sale"] = dict(price_cents=pricing.sale_price(sp, s), terms=pricing.special_terms(sp))
-        out.append(row)
-    return jsonify(services=out, addons=[addon_json(a) for a in addons])
+    return jsonify(services=[dict(service_json(s), weekly_deal=pricing.deal_eligible(s)) for s in rows],
+                   addons=[addon_json(a) for a in addons])
 
 
 @bp.get("/quote")
@@ -137,10 +132,14 @@ def price_quote():
     company = pricing.find_company(code) if code and s.category == "event" and pricing.corporate_live() else None
     if code and s.category == "event" and not company:
         return fail(CODE_INVALID, field="corporate_code")
-    out = pricing.price(s, addons, hours, regular, start, company)
+    out = pricing.price(s, addons, hours, regular, start, company, area_arg(request.args.get("area")))
     out.pop("company_id")
-    out.pop("special_id")
     return jsonify({**out, "company_name": company.name if company else None})
+
+
+def area_arg(value):
+    value = str(value or "").strip()
+    return value if value in pricing.AREAS else None
 
 
 def _availability_args():
@@ -152,13 +151,14 @@ def _availability_args():
             return None
         minutes = int((b.end_at - b.start_at).total_seconds() // 60)
         setup = int((b.start_at - b.block_start_at).total_seconds() // 60)
-        return dict(minutes=minutes, setup=setup, exclude=b.id, quote=None)
+        service = db.session.get(Service, b.service_id) if b.service_id and b.source != "manual" else None
+        return dict(minutes=minutes, setup=setup, exclude=b.id, quote=None, service=service, area=b.area or "")
     s = get_bookable(request.args.get("service", ""))
     if not s:
         return None
     addons = selected_addons(request.args.get("addons", "").split(","), s)
     total, minutes, deposit, hours = quote(s, addons, request.args.get("hours"))
-    return dict(minutes=minutes, setup=s.setup_min, exclude=None,
+    return dict(minutes=minutes, setup=s.setup_min, exclude=None, service=s, area=None,
                 quote=dict(total_cents=total, duration_min=minutes, deposit_cents=deposit, hours=hours))
 
 
@@ -175,7 +175,10 @@ def availability_month():
     except (ValueError, TypeError):
         return fail("Use a month like 2026-11.")
     days = slots_between(first, last, args["minutes"], args["setup"], args["exclude"])
-    return jsonify(days={d.isoformat(): len(v) for d, v in days.items()}, **(args["quote"] or {}))
+    # Which days have a Weekly Deal, by area. Only for showing a tag: prices come from /quote.
+    deals = pricing.deal_dates(args["service"], first, last, args["area"])
+    return jsonify(days={d.isoformat(): len(v) for d, v in days.items()}, deal_days=deals,
+                   deal_cents=pricing.deal_cents() if deals else 0, **(args["quote"] or {}))
 
 
 @bp.get("/availability/day")
@@ -213,6 +216,9 @@ def create_booking():
         return fail("Enter the street address where Kerimah should come.", field="address")
     if s.confirm_text and not data.get("confirmed_requirement"):
         return fail(f"Confirm this to book {s.family}: {s.confirm_text}", field="confirmed_requirement")
+    area = area_arg(data.get("area"))
+    if not area:
+        return fail(AREA_MISSING, field="area")
     if not data.get("agreed_policy"):
         return fail("Agree to the reservation policies to continue.", field="agreed_policy")
     try:
@@ -242,19 +248,18 @@ def create_booking():
     if not slot_is_open(start, minutes, s.setup_min):
         db.session.rollback()
         return fail("That time was just taken. Choose another.", 409, "start_at")
-    p = pricing.price(s, addons, hours, regular, start, company)
+    p = pricing.price(s, addons, hours, regular, start, company, area)
     b = Booking(service_id=s.id, service_name=s.name, hours=hours,
                 addons=[dict(name=a.name, price_cents=unit(a)) for a in addons],
                 block_start_at=start - timedelta(minutes=s.setup_min), start_at=start,
                 end_at=start + timedelta(minutes=minutes), status="held",
                 hold_expires_at=utcnow() + timedelta(minutes=get_int_setting("hold_min")),
                 customer_name=clean(data, "name"), customer_email=email,
-                customer_phone=clean(data, "phone", 40), location_type=location, address=address,
+                customer_phone=clean(data, "phone", 40), location_type=location, address=address, area=area,
                 extra_therapists=bool(data.get("extra_therapists")) and s.category == "event",
                 notes=clean(data, "notes", 1000), total_cents=p["total_cents"], deposit_cents=p["deposit_cents"],
                 regular_cents=p["regular_cents"], discount_cents=p["discount_cents"],
-                discount_kind=p["discount_kind"], discount_label=p["discount_label"],
-                special_id=p["special_id"], company_id=p["company_id"])
+                discount_kind=p["discount_kind"], discount_label=p["discount_label"], company_id=p["company_id"])
     db.session.add(b)
     db.session.commit()
 
@@ -295,19 +300,50 @@ def release_booking(token):
     return jsonify(status=b.status)
 
 
-@bp.post("/bookings/<token>/reschedule")
-@limiter.limit("10 per hour")
-def reschedule_booking(token):
-    """Her policy: one deposit transfer, with at least 24 hours' notice."""
-    b = Booking.query.filter_by(token=token).first_or_404()
-    info = booking_public(b)
+def reschedule_refusal(b):
+    """Why this booking can't be moved online, or None."""
     if b.status != "confirmed" or b.start_at <= utcnow():
         return fail(f"This appointment can't be changed online. {TEXT_HER}.", 409)
     if b.reschedule_count >= 1:
         return fail(f"This appointment has already been rescheduled once, which is the one deposit transfer "
                     f"allowed. {TEXT_HER} for help.", 409)
+    info = booking_public(b)
     if not info["can_reschedule"]:
         return fail(f"Rescheduling needs {info['notice_hours']} hours' notice. {TEXT_HER}.", 409)
+    return None
+
+
+def price_view(b, p):
+    return dict(regular_cents=p["regular_cents"], discount_cents=p["discount_cents"],
+                discount_label=p["discount_label"], total_cents=p["total_cents"],
+                deposit_paid_cents=b.deposit_paid_cents, balance_cents=p["total_cents"] - b.deposit_paid_cents,
+                changed=p["total_cents"] != b.total_cents)
+
+
+@bp.get("/bookings/<token>/reschedule-quote")
+@limiter.limit("300 per hour")
+def reschedule_quote(token):
+    """The new total if this booking moves to start_at, so the client sees it before confirming."""
+    b = Booking.query.filter_by(token=token).first_or_404()
+    refusal = reschedule_refusal(b)
+    if refusal:
+        return refusal
+    try:
+        start = parse_start(request.args.get("start_at", ""))
+    except ValueError:
+        return fail("Choose a new time.", field="start_at")
+    return jsonify(price_view(b, pricing.repriced(b, start)))
+
+
+@bp.post("/bookings/<token>/reschedule")
+@limiter.limit("10 per hour")
+def reschedule_booking(token):
+    """Her policy: one deposit transfer, with at least 24 hours' notice. The Weekly Deal is worked out again
+    for the new date."""
+    b = Booking.query.filter_by(token=token).first_or_404()
+    refusal = reschedule_refusal(b)
+    if refusal:
+        return refusal
     try:
         start = parse_start((request.get_json(silent=True) or {}).get("start_at", ""))
     except ValueError:
@@ -322,8 +358,10 @@ def reschedule_booking(token):
     b.block_start_at = start - timedelta(minutes=setup)
     b.start_at, b.end_at = start, start + timedelta(minutes=minutes)
     b.reschedule_count += 1
+    old_total = b.total_cents
+    pricing.apply_pricing(b, pricing.repriced(b, start))
     db.session.commit()
-    notify.booking_rescheduled(b, old_when)
+    notify.booking_rescheduled(b, old_when, old_total)
     return jsonify(booking_public(b))
 
 
