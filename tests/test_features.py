@@ -1,7 +1,7 @@
 """Calendar blocking and the corporate loyalty program. Weekly Deals are in test_weekly_deals.py."""
 from datetime import timedelta
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from api.models import Booking, add_missing_columns, db
 from tests.test_app import admin, app, book_and_pay, client, day_slots, first_slot, next_weekday, payload  # noqa: F401
@@ -255,6 +255,6 @@ def test_existing_database_gets_new_columns(app):
         db.session.execute(text("ALTER TABLE bookings DROP COLUMN discount_label"))
         db.session.commit()
         add_missing_columns()
-        cols = [r[1] for r in db.session.execute(text("PRAGMA table_info(bookings)"))]
+        cols = [c["name"] for c in inspect(db.engine).get_columns("bookings")]
         assert "discount_label" in cols
         assert Booking.query.count() == 0

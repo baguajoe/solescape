@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import time as pytime
 from datetime import date, datetime, timedelta
@@ -11,20 +12,32 @@ from api.availability import slots_between, to_local, to_utc
 from api.models import Booking, Product, Service, TimeOff, db, set_setting, utcnow
 
 SVC = "sole-cleanse-60"
+# Set to a throwaway Postgres database to run every test on Postgres too (CI does). Its tables are dropped.
+PG_URL = os.getenv("TEST_DATABASE_URL", "")
+
+
+def db_url_for(tmp_path):
+    return PG_URL or f"sqlite:///{tmp_path}/t.db"
+
+
+def drop_test_db(app):
+    with app.app_context():
+        db.session.remove()
+        if PG_URL:
+            db.drop_all()
+        db.engine.dispose()
 
 
 @pytest.fixture()
 def app(tmp_path):
     app = create_app({
-        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path}/t.db", "TESTING": True, "RATELIMIT_ENABLED": False,
+        "SQLALCHEMY_DATABASE_URI": db_url_for(tmp_path), "TESTING": True, "RATELIMIT_ENABLED": False,
         "STRIPE_SECRET_KEY": "", "STRIPE_WEBHOOK_SECRET": "", "ADMIN_PASSWORD": "pw", "SECRET_KEY": "x" * 32,
     })
     from api.extensions import limiter
     limiter.enabled = False
     yield app
-    with app.app_context():
-        db.session.remove()
-        db.engine.dispose()
+    drop_test_db(app)
 
 
 @pytest.fixture()

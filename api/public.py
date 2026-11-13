@@ -478,7 +478,7 @@ def demo_pay(kind, token):
 @bp.post("/stripe/webhook")
 def stripe_webhook():
     secret = current_app.config["STRIPE_WEBHOOK_SECRET"]
-    if not secret:
+    if not secret or payments.demo_mode():
         abort(404)
     try:
         event = stripe.Webhook.construct_event(request.get_data(), request.headers.get("Stripe-Signature", ""), secret)

@@ -5,7 +5,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .config import Config, check_production
+from .config import Config, check_settings, engine_options, normalize_db_url
 from .extensions import limiter
 from .models import db
 
@@ -17,11 +17,18 @@ def create_app(overrides=None):
     app = Flask(__name__, instance_path=os.path.abspath("instance"), static_folder=None)
     app.config.from_object(Config)
     app.config.update(overrides or {})
-    check_production(app.config)
-    if app.config["APP_ENV"] == "production":
+    app.config["SQLALCHEMY_DATABASE_URI"] = normalize_db_url(app.config["SQLALCHEMY_DATABASE_URI"])
+    app.config.setdefault("SQLALCHEMY_ENGINE_OPTIONS", engine_options(app.config["SQLALCHEMY_DATABASE_URI"]))
+    check_settings(app.config)
+    shared = app.config["APP_ENV"] in ("preview", "production")
+    if "SESSION_COOKIE_SECURE" not in (overrides or {}):
+        app.config["SESSION_COOKIE_SECURE"] = shared  # admin cookie only over https
+    if shared:
+        # Behind Vercel or another proxy: trust its one hop for the client IP (rate limits) and https.
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-    os.makedirs(app.instance_path, exist_ok=True)
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+        os.makedirs(app.instance_path, exist_ok=True)  # SQLite's file lives here. Vercel's disk is read-only.
     db.init_app(app)
     limiter.init_app(app)
 
@@ -30,13 +37,9 @@ def create_app(overrides=None):
     app.register_blueprint(public_bp)
     app.register_blueprint(admin_bp)
 
-    from .models import add_missing_columns
-    from .seed import seed_if_empty, update_wording
+    from .seed import prepare_database, seed_if_empty
     with app.app_context():
-        db.create_all()
-        add_missing_columns()
-        seed_if_empty()
-        update_wording()
+        prepare_database()
 
     @app.cli.command("seed")
     def seed_command():

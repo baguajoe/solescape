@@ -1,6 +1,8 @@
 """Her menu, sent Nov 2026 (wording updated Nov 12, 2026; event sentence moved to the Events intro after that). Prices in cents. Hourly services charge
 price_cents per hour."""
-from .models import AddOn, CalendarLock, Service, WeeklyHours, db
+from sqlalchemy import text
+
+from .models import AddOn, CalendarLock, Service, WeeklyHours, add_missing_columns, db
 
 SETUP = "LMT arrives 30 minutes prior for setup."
 
@@ -44,10 +46,12 @@ HOURS = {0: ("11:00", "19:00"), 1: ("11:00", "19:00"), 2: ("11:30", "19:00"), 3:
          4: ("10:00", "18:00"), 5: ("10:00", "18:00"), 6: (None, None)}
 
 
-def ensure_lock():
+def ensure_lock(commit=True):
+    """The one calendar_lock row that booking writes take turns on (see availability.lock_calendar)."""
     if not db.session.get(CalendarLock, 1):
         db.session.add(CalendarLock(id=1, version=0))
-        db.session.commit()
+        if commit:
+            db.session.commit()
 
 
 # Her earlier wording, replaced in Nov 2026. update_wording() swaps it on an existing database, but only where
@@ -64,7 +68,7 @@ OLD_SUMMARIES = {
 }
 
 
-def update_wording():
+def update_wording(commit=True):
     new = {row["slug"]: row["summary"] for row in SERVICES}
     changed = False
     for slug, olds in OLD_SUMMARIES.items():
@@ -72,13 +76,13 @@ def update_wording():
         if s and s.summary in olds and s.summary != new[slug]:
             s.summary = new[slug]
             changed = True
-    if changed:
+    if changed and commit:
         db.session.commit()
     return changed
 
 
-def seed_if_empty():
-    ensure_lock()
+def seed_if_empty(commit=True):
+    ensure_lock(commit)
     if Service.query.first():
         return False
     for i, row in enumerate(SERVICES):
@@ -89,5 +93,31 @@ def seed_if_empty():
                          summary="Add foot soaks."))
     for day, (opens, closes) in HOURS.items():
         db.session.add(WeeklyHours(weekday=day, opens=opens, closes=closes))
-    db.session.commit()
+    if commit:
+        db.session.commit()
     return True
+
+
+SETUP_LOCK_ID = 7_201_993  # any fixed number; only this app takes it
+
+
+def prepare_database():
+    """Runs on every start: create tables, add new columns, load her menu, hours and the calendar lock row,
+    then apply wording updates. All of it is one transaction.
+
+    On Postgres it first takes an advisory lock, so when Vercel starts many copies at once they queue here:
+    the first does the work and commits, the rest find it done and change nothing. The lock is released
+    at commit, and the transaction-level kind also works through Neon's pooled connection.
+    Postgres can create tables inside a transaction, so a copy that fails part way leaves nothing behind."""
+    conn = db.session.connection()
+    if conn.dialect.name == "postgresql":
+        conn.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": SETUP_LOCK_ID})
+    try:
+        db.metadata.create_all(conn)
+        add_missing_columns(conn)
+        seed_if_empty(commit=False)
+        update_wording(commit=False)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise

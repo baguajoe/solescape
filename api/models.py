@@ -283,20 +283,24 @@ def get_float_setting(key):
         return float(DEFAULT_SETTINGS[key])
 
 
-def add_missing_columns():
+def add_missing_columns(conn=None):
     """create_all() never alters existing tables. Add any new, nullable columns so an existing
-    database keeps working after an update. It never drops or changes a column."""
+    database keeps working after an update. It never drops or changes a column.
+    With conn, it runs inside that connection's transaction and leaves the commit to the caller."""
     from sqlalchemy import inspect, text
-    insp = inspect(db.engine)
+    own = conn is None
+    conn = conn or db.session.connection()
+    insp = inspect(conn)
     for table in db.metadata.sorted_tables:
         if not insp.has_table(table.name):
             continue
         have = {c["name"] for c in insp.get_columns(table.name)}
         for col in table.columns:
             if col.name not in have and col.nullable and not col.primary_key:
-                kind = col.type.compile(dialect=db.engine.dialect)
-                db.session.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {kind}'))
-    db.session.commit()
+                kind = col.type.compile(dialect=conn.dialect)
+                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {kind}'))
+    if own:
+        db.session.commit()
 
 
 def set_setting(key, value):

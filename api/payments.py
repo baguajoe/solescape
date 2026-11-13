@@ -14,7 +14,12 @@ STRIPE_MIN_EXPIRY_MIN = 31  # Stripe requires at least 30
 
 
 def demo_mode():
-    return not current_app.config["STRIPE_SECRET_KEY"]
+    """No real payments: without Stripe keys, and always on a preview site, even if keys were added.
+    Production can't get here, because it refuses to start without Stripe keys."""
+    cfg = current_app.config
+    if cfg["APP_ENV"] == "production":
+        return False
+    return cfg["APP_ENV"] == "preview" or not cfg["STRIPE_SECRET_KEY"]
 
 
 def _checkout(name, amount_cents, email, success_url, cancel_url, metadata):

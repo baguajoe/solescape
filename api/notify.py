@@ -2,7 +2,7 @@ import logging
 import smtplib
 from email.message import EmailMessage
 
-from flask import current_app
+from flask import after_this_request, current_app, has_request_context
 
 from .availability import date_label, time_label
 from .serializers import AREA_LABELS
@@ -14,8 +14,13 @@ def money(cents):
     return f"${cents / 100:,.2f}"
 
 
+SMTP_TIMEOUT = 10
+
+
 def send(to, subject, body):
-    """Email must never break a payment or booking, so failures are only logged."""
+    """Email must never break or slow down a payment or booking. During a request the message is sent after
+    the response has gone to the browser (Werkzeug's call_on_close, which Vercel, gunicorn and the dev
+    server all run once the body is written), and failures are only logged."""
     cfg = current_app.config
     if not cfg["SMTP_HOST"]:
         log.info("Email not configured. Would send to %s: %s", to, subject)
@@ -26,14 +31,29 @@ def send(to, subject, body):
         msg["To"] = to
         msg["Subject"] = subject
         msg.set_content(body)
-        with smtplib.SMTP(cfg["SMTP_HOST"], cfg["SMTP_PORT"], timeout=15) as smtp:
-            smtp.starttls()
-            if cfg["SMTP_USER"]:
-                smtp.login(cfg["SMTP_USER"], cfg["SMTP_PASSWORD"])
-            smtp.send_message(msg)
+    except Exception:
+        log.exception("Could not build email to %s", to)
+        return False
+    smtp = {k: cfg[k] for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD")}
+    if has_request_context():
+        @after_this_request
+        def later(response):
+            response.call_on_close(lambda: deliver(msg, smtp))
+            return response
+        return True
+    return deliver(msg, smtp)
+
+
+def deliver(msg, smtp):
+    try:
+        with smtplib.SMTP(smtp["SMTP_HOST"], smtp["SMTP_PORT"], timeout=SMTP_TIMEOUT) as conn:
+            conn.starttls()
+            if smtp["SMTP_USER"]:
+                conn.login(smtp["SMTP_USER"], smtp["SMTP_PASSWORD"])
+            conn.send_message(msg)
         return True
     except Exception:
-        log.exception("Could not send email to %s", to)
+        log.exception("Could not send email to %s", msg["To"])
         return False
 
 
