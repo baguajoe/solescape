@@ -78,7 +78,11 @@ def check_settings(cfg):
     problems = []
     if ON_VERCEL and cfg.get("SQLALCHEMY_DATABASE_URI", "").startswith("sqlite"):
         problems.append("DATABASE_URL (Vercel doesn't keep files, so add the Neon Postgres database)")
-    if env == "preview":
+    if ON_VERCEL and env == "development":
+        # A public site in development mode would accept the default "change-me" admin password. List everything
+        # preview needs too, so a fresh Vercel project gets one complete list instead of one setting at a time.
+        problems.append("APP_ENV (preview or production; development is only for your own computer)")
+    if env == "preview" or (ON_VERCEL and env == "development"):
         if not os.getenv("SECRET_KEY"):
             problems.append("SECRET_KEY")
         if len(cfg.get("ADMIN_PASSWORD", "")) < MIN_PREVIEW_PASSWORD or cfg.get("ADMIN_PASSWORD") == "change-me":

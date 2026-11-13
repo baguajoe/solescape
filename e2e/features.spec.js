@@ -287,7 +287,9 @@ test.describe('Weekly Deals', () => {
     let date = new Date(`${monthDay}, ${year} 12:00`);
     if (date < new Date(Date.now() - 86400000)) date = new Date(`${monthDay}, ${year + 1} 12:00`);
     await openAdminDay(admin, date);
-    const card = admin.locator('.agenda', { hasText: 'Ada Tester' }).first();
+    // Other tests also book Ada Tester, sometimes on this same day, so pick this booking's card by its service
+    const card = admin.locator('.agenda', { hasText: 'Ada Tester' }).filter({ hasText: 'Sole Cleanse, 60 minutes' })
+      .filter({ hasNotText: 'Cancelled' }).first();
     await expect(card).toContainText('Area: South Coast');
     await expect(card).toContainText('Weekly Deal');
     await admin.close();

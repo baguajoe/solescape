@@ -106,6 +106,24 @@ def test_vercel_refuses_sqlite(make_app, monkeypatch):
                  SQLALCHEMY_DATABASE_URI="sqlite:///x.db")
 
 
+def test_vercel_with_no_settings_lists_everything_missing(make_app, monkeypatch):
+    """A new Vercel project has no variables, so APP_ENV defaults to development. It must not boot that way
+    (the admin password would be "change-me"), and the error must name every setting to add."""
+    monkeypatch.setattr(config, "ON_VERCEL", True)
+    with pytest.raises(RuntimeError) as err:
+        make_app("development", SQLALCHEMY_DATABASE_URI="sqlite:///x.db", ADMIN_PASSWORD="change-me")
+    for name in ("APP_ENV", "DATABASE_URL", "SECRET_KEY", "ADMIN_PASSWORD"):
+        assert name in str(err.value)
+
+
+def test_vercel_with_only_a_database_still_refuses_development(make_app, monkeypatch):
+    monkeypatch.setattr(config, "ON_VERCEL", True)
+    with pytest.raises(RuntimeError, match="APP_ENV") as err:
+        make_app("development", GOOD["SECRET_KEY"], ADMIN_PASSWORD=GOOD["ADMIN_PASSWORD"],
+                 SQLALCHEMY_DATABASE_URI="postgresql+psycopg2://neon.example/db")
+    assert "SECRET_KEY" not in str(err.value) and "DATABASE_URL" not in str(err.value)
+
+
 def test_public_url_falls_back_to_the_vercel_address(monkeypatch):
     monkeypatch.delenv("PUBLIC_URL", raising=False)
     monkeypatch.delenv("VERCEL_PROJECT_PRODUCTION_URL", raising=False)
