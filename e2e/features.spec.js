@@ -182,7 +182,7 @@ test.describe('her wording', () => {
     // Tagline sits under the paragraph and above the buttons; How it works is unchanged
     const tagline = page.locator('.hero .tagline');
     await expect(tagline).toHaveText('She travels to you');
-    const order = await page.locator('.hero-copy > *').evaluateAll((els) => els.map((e) => e.className));
+    const order = await page.locator('.hero-copy > *').evaluateAll((els) => els.map((e) => e.className.replace(/\s*keep-lines\s*/, '')));
     expect(order.slice(0, 4)).toEqual(['', 'hero-lead', 'tagline', 'row']);
     await expect(page.getByRole('heading', { name: 'She comes to you' })).toBeVisible();
 

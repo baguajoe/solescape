@@ -8,6 +8,7 @@ import AdminSchedule from './AdminSchedule.jsx';
 import AdminSettings from './AdminSettings.jsx';
 import AdminMessages from './AdminMessages.jsx';
 import AdminCorporate from './AdminCorporate.jsx';
+import AdminSiteText from './AdminSiteText.jsx';
 
 function Login({ onDone }) {
   const [password, setPassword] = useState('');
@@ -51,6 +52,7 @@ export default function Admin() {
         <NavLink end to="/admin">Calendar</NavLink>
         <NavLink to="/admin/messages">Messages</NavLink>
         <NavLink to="/admin/orders">Orders</NavLink>
+        <NavLink to="/admin/text">Site text</NavLink>
         <NavLink to="/admin/services">Services and products</NavLink>
         <NavLink to="/admin/corporate">Corporate clients</NavLink>
         <NavLink to="/admin/hours">Hours and time off</NavLink>
@@ -62,6 +64,7 @@ export default function Admin() {
           <Route index element={<AdminCalendar />} />
           <Route path="messages" element={<AdminMessages />} />
           <Route path="orders" element={<AdminOrders />} />
+          <Route path="text" element={<AdminSiteText />} />
           <Route path="services" element={<AdminCatalog />} />
           <Route path="corporate" element={<AdminCorporate />} />
           <Route path="hours" element={<AdminSchedule />} />

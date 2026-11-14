@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 import stripe
 from flask import Blueprint, Response, abort, current_app, jsonify, request
 
-from . import ics, notify, payments, pricing
+from . import ics, notify, payments, pricing, site_text
 from .availability import (BLOCKING, date_label, iso_utc, lock_calendar, month_bounds, slot_is_open,
                            slots_between, time_label, to_utc)
 from .extensions import limiter
@@ -102,6 +102,14 @@ def config():
         corporate=dict(description=get_setting("corporate_description").strip()) if pricing.corporate_live() else None,
         hours=[dict(weekday=d, opens=hours[d].opens, closes=hours[d].closes) for d in sorted(hours)],
     )
+
+
+@bp.get("/site-text")
+def public_site_text():
+    """The website wording, with her edits from the Site text page. Never cached, so a save shows at once."""
+    resp = jsonify(texts=site_text.public_texts())
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @bp.get("/services")

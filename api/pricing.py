@@ -103,14 +103,15 @@ def deal_dates(service, first, last, area=None):
     return days
 
 
-def deal_text():
-    """Her banner text, built from the settings. With the default settings it's exactly what she wrote."""
+def deal_text(even_if_off=False):
+    """Her banner text, built from the settings. With the default settings it's exactly what she wrote.
+    The Site text page can replace it (deal_public uses her version)."""
     parts = []
     for key, name, _ in DEAL_AREAS:
         day = deal_day(key)
         if day is not None:
             parts.append((day, f"{DAYS[day]} {name}"))
-    if not (deal_on() and parts):
+    if not ((even_if_off or deal_on()) and parts):
         return None
     days = "; ".join(p for _, p in sorted(parts))
     return (f"{days}. {fmt_money(deal_cents())} off 60-minute & 90-minute sessions. "
@@ -118,8 +119,12 @@ def deal_text():
 
 
 def deal_public():
+    """The banner, shown only while a deal is on: her own wording from the Site text page, or the built text."""
+    from .site_text import edited_value
     text = deal_text()
-    return dict(text=text, amount_cents=deal_cents()) if text else None
+    if not text:
+        return None
+    return dict(text=edited_value("deals.banner") or text, amount_cents=deal_cents())
 
 
 # Corporate program

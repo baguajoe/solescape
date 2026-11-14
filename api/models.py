@@ -213,6 +213,14 @@ class Setting(db.Model):
     value = db.Column(db.Text, nullable=False)
 
 
+class SiteText(db.Model):
+    """Her edit of one block of website wording. No row = the original in api/site_text.json."""
+    __tablename__ = "site_text"
+    key = db.Column(db.String(60), primary_key=True)
+    value = db.Column(db.Text, nullable=False)  # a string, or JSON for questions and answers
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
+
+
 class CalendarLock(db.Model):
     """One row. Writers UPDATE it first, so booking checks run one at a time on SQLite and Postgres."""
     __tablename__ = "calendar_lock"

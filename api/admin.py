@@ -6,7 +6,7 @@ from functools import wraps
 from flask import Blueprint, current_app, jsonify, request, session
 from sqlalchemy import or_
 
-from . import payments, pricing
+from . import payments, pricing, site_text
 from .availability import (BLOCKING, iso_utc, date_label, lock_calendar, month_bounds, overlapping_appointments,
                            recurring_occurrences, still_free, time_label, to_local, to_utc)
 from .extensions import limiter
@@ -305,9 +305,36 @@ def _money_or_none(value):
 @bp.get("/catalog")
 @admin_required
 def catalog():
-    return jsonify(services=[service_json(s) for s in Service.query.order_by(Service.sort_order).all()],
+    return jsonify(services=[service_admin(s) for s in Service.query.order_by(Service.sort_order).all()],
                    addons=[addon_json(a) for a in AddOn.query.all()],
                    products=[product_json(p) for p in Product.query.order_by(Product.sort_order).all()])
+
+
+def original_service_text(s):
+    from .seed import SERVICES
+    return next((dict(summary=row["summary"], note=row.get("note", "")) for row in SERVICES
+                 if row["slug"] == s.slug), None)
+
+
+def service_admin(s):
+    original = original_service_text(s)
+    return dict(service_json(s), original_summary=original and original["summary"],
+                original_note=original and original["note"])
+
+
+@bp.post("/services/<int:sid>/reset-text")
+@admin_required
+def reset_service_text(sid):
+    """Puts her original description and note back. Prices and everything else stay."""
+    s = db.session.get(Service, sid)
+    if not s:
+        return fail("Service not found.", 404)
+    original = original_service_text(s)
+    if not original:
+        return fail("You added this service yourself, so there's no original text to go back to.")
+    s.summary, s.note = original["summary"], original["note"]
+    db.session.commit()
+    return jsonify(service_admin(s))
 
 
 @bp.post("/services")
@@ -346,14 +373,21 @@ def _apply_service(s, data, code):
         return fail("Prices and minutes must be whole positive numbers.")
     if s.setup_min is None:
         s.setup_min = 30
-    for key in ("name", "family", "summary", "note", "confirm_text"):
+    for key in ("name", "family", "confirm_text"):
         if key in data and data[key] is not None:
             setattr(s, key, clean(data, key, 1000))
+    for key in site_text.SERVICE_TEXT:
+        if key in data and data[key] is not None:
+            try:
+                setattr(s, key, site_text.clean_service_text(key, data[key]))
+            except site_text.TextError as err:
+                db.session.rollback()
+                return fail(str(err), field=key)
     for key in ("active", "first_time_only"):
         if key in data:
             setattr(s, key, bool(data[key]))
     db.session.commit()
-    return jsonify(service_json(s)), code
+    return jsonify(service_admin(s)), code
 
 
 @bp.patch("/addons/<int:aid>")
@@ -556,6 +590,36 @@ def update_settings():
         set_setting(key, str(value).strip())
     db.session.commit()
     return settings()
+
+
+# Site text: the website wording she edits herself
+
+@bp.get("/site-text")
+@admin_required
+def site_text_pages():
+    return jsonify(pages=site_text.admin_pages())
+
+
+@bp.put("/site-text/<key>")
+@admin_required
+def save_site_text(key):
+    if key not in site_text.BLOCKS:
+        return fail("That part of the site isn't editable.", 404)
+    try:
+        site_text.save(key, (request.get_json(silent=True) or {}).get("value"))
+    except site_text.TextError as err:
+        db.session.rollback()
+        return fail(str(err), field="value")
+    return jsonify(site_text.admin_block(key))
+
+
+@bp.delete("/site-text/<key>")
+@admin_required
+def reset_site_text(key):
+    if key not in site_text.BLOCKS:
+        return fail("That part of the site isn't editable.", 404)
+    site_text.reset(key)
+    return jsonify(site_text.admin_block(key))
 
 
 # Corporate clients

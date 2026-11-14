@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, INSTAGRAM, PHONE, SMS } from '../api.js';
+import { useSiteText } from '../siteText.jsx';
 import usePage from '../usePage.js';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -12,6 +13,7 @@ const blank = { name: '', email: '', phone: '', topic: 'question', message: '', 
 
 export default function Contact({ config }) {
   usePage('Contact', 'Text or call 617.297.8564, email solescapefootspa@gmail.com, or send SoleScape a message about appointments and events.');
+  const { t } = useSiteText();
   const [form, setForm] = useState(blank);
   const [error, setError] = useState(null);
   const [sent, setSent] = useState(false);
@@ -31,14 +33,14 @@ export default function Contact({ config }) {
   return (
     <div className="page contact">
       <h1>Contact</h1>
-      <p className="lead">The fastest way to reach Kerimah is a text. Ready to book? <Link to="/book">Pick a time online</Link>.</p>
+      <p className="lead keep-lines">{t('contact.intro')} Ready to book? <Link to="/book">Pick a time online</Link>.</p>
       <div className="contact-grid">
         <div>
           <ul className="ways">
             <li><span>Text or call</span><a href={SMS}>{PHONE}</a></li>
             <li><span>Email</span><a href="mailto:solescapefootspa@gmail.com">solescapefootspa@gmail.com</a></li>
             <li><span>Instagram</span><a href={INSTAGRAM}>@_solescapefootspa</a></li>
-            <li><span>Service area</span>Your home or workplace, Boston to the South Coast</li>
+            <li><span>Service area</span>{t('contact.service_area')}</li>
           </ul>
           {config?.hours && (
             <>

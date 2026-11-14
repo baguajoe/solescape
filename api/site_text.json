@@ -1,0 +1,94 @@
+{
+  "_comment": "The website's original wording, which Kerimah can change on the Site text page in the admin. Her edits are kept in the database (site_text table); this file is the original that \"Reset to original\" goes back to. The site's code reads it too, so a page shows this text if the API is slow. kind: line (one line), text (line breaks kept; an empty line starts a new paragraph), list (one item per line), pairs (questions and answers). {deposit} is filled in with the deposit from Settings.",
+  "pages": [
+    {
+      "name": "Home",
+      "path": "/",
+      "blocks": [
+        {"key": "home.headline", "label": "Headline", "kind": "line", "max": 120,
+         "default": "A complete sole to soul recovery experience."},
+        {"key": "home.intro", "label": "Intro paragraph", "kind": "text", "max": 400,
+         "help": "Search engines show this too.",
+         "default": "SoleScape Foot Spa & Massage delivers mobile therapeutic foot care to restore movement, relieve chronic pain, and prevent injuries—right where you are."},
+        {"key": "home.tagline", "label": "Tagline", "kind": "line", "max": 60,
+         "default": "She travels to you"},
+        {"key": "home.facts", "label": "Bullet lines", "kind": "list", "max": 600, "max_items": 6, "item_max": 200,
+         "help": "One bullet per line.",
+         "default": "All services are performed by your licensed massage therapist (LMT) at your home or workplace.\nAll equipment is provided for your service.\nLMT arrives 30 minutes prior for setup."},
+        {"key": "home.steps", "label": "How it works", "kind": "pairs", "min_items": 3, "max_items": 3,
+         "fields": ["Step title", "Step text"], "q_max": 60, "a_max": 300, "hash": "how",
+         "default": [
+           {"q": "Book online", "a": "Pick your service and an open time on her live calendar. A $75 deposit holds it and goes toward your total."},
+           {"q": "She comes to you", "a": "Kerimah arrives 30 minutes early and brings all the equipment for your service."},
+           {"q": "Relax", "a": "Enjoy your session, then pay the balance. Need to move it? Reschedule once online with 24 hours' notice."}
+         ]},
+        {"key": "home.cta_heading", "label": "Closing heading", "kind": "line", "max": 100, "hash": "closing",
+         "default": "Wellness that comes to you."},
+        {"key": "home.cta_text", "label": "Closing line", "kind": "text", "max": 300, "hash": "closing",
+         "help": "Shown above the Book an appointment and Ask a question buttons at the bottom of the page.",
+         "default": "Mobile service at your home or workplace, from Boston to the South Coast."}
+      ]
+    },
+    {
+      "name": "Services",
+      "path": "/services",
+      "blocks": [
+        {"key": "services.intro", "label": "Page intro", "kind": "text", "max": 600,
+         "default": "A sole to soul lasting experience. All services are performed by your licensed massage therapist (LMT) at your home or workplace. All equipment is provided for your service."},
+        {"key": "services.events_intro", "label": "Events intro", "kind": "text", "max": 400, "hash": "events",
+         "default": "Convenient for corporate events, community events, and special events."},
+        {"key": "services.faq", "label": "Questions", "kind": "pairs", "min_items": 1, "max_items": 20,
+         "fields": ["Question", "Answer"], "q_max": 150, "a_max": 800, "hash": "faq",
+         "default": [
+           {"q": "Where are services held?", "a": "At your home or workplace, from Boston to the South Coast of Massachusetts."},
+           {"q": "Do I need my own table or supplies?", "a": "No. All equipment is provided for your service."},
+           {"q": "When does Kerimah arrive?", "a": "Thirty minutes before your start time, to set up."},
+           {"q": "How does the deposit work?", "a": "Every reservation needs a {deposit} deposit to hold your date and time. It's applied to your balance and is non-refundable."},
+           {"q": "Can I change my appointment?", "a": "Yes, once, with at least 24 hours' notice. Use the link in your confirmation email to pick a new time, and your deposit moves with it. Same-day cancellations forfeit the deposit."},
+           {"q": "Can I book a massage while pregnant?", "a": "Mama's Sole Relief is designed for clients in their 2nd and 3rd trimester."},
+           {"q": "How do events work?", "a": "Recovery Lounge and Foot Loose are booked by the hour with a 3-hour minimum. Additional licensed massage therapists are available on request."}
+         ]}
+      ]
+    },
+    {
+      "name": "About",
+      "path": "/about",
+      "blocks": [
+        {"key": "about.heading", "label": "Heading", "kind": "line", "max": 120,
+         "help": "Also shown on the Home page.",
+         "default": "Hello! I'm Kerimah, your licensed massage therapist."},
+        {"key": "about.bio", "label": "Bio", "kind": "text", "max": 2000,
+         "help": "Leave an empty line between paragraphs. The Home page shows the first paragraph.",
+         "default": "My learning experience into holistic health started in 2011, earning credentials from The Salter School & The Costa Rica School of Massage Therapy. Licensed by the Commonwealth of Massachusetts, I am certified in reflexology and insured through Associated Bodywork & Massage Professionals.\n\nMy great-grandfather was a massage therapist in Panama, and I am grateful to continue his journey through his talents. As an earth sign, my healing element is water. I enjoy good food, creative writing, sunrises, and swimming."},
+        {"key": "about.credentials", "label": "Credentials list", "kind": "list", "max": 1200, "max_items": 12, "item_max": 150,
+         "help": "One per line.",
+         "default": "Licensed by the Commonwealth of Massachusetts\nCertified in reflexology\nInsured through Associated Bodywork & Massage Professionals\nThe Salter School\nThe Costa Rica School of Massage Therapy\nStudying holistic health since 2011"},
+        {"key": "about.why_heading", "label": "Why mobile: heading", "kind": "line", "max": 80, "hash": "why-mobile",
+         "default": "Why mobile"},
+        {"key": "about.why_text", "label": "Why mobile: text", "kind": "text", "max": 1200, "hash": "why-mobile",
+         "help": "Leave an empty line between paragraphs.",
+         "default": "SoleScape brings the spa to you. Kerimah carries every piece of equipment, sets up 30 minutes before your session, and works wherever you're most comfortable: your living room, your office or your event space.\n\nThat means no driving after a massage, and more time to rest."}
+      ]
+    },
+    {
+      "name": "Contact",
+      "path": "/contact",
+      "blocks": [
+        {"key": "contact.intro", "label": "Intro line", "kind": "text", "max": 300,
+         "help": "A \"Ready to book? Pick a time online.\" link always follows it.",
+         "default": "The fastest way to reach Kerimah is a text."},
+        {"key": "contact.service_area", "label": "Service area", "kind": "line", "max": 150,
+         "default": "Your home or workplace, Boston to the South Coast"}
+      ]
+    },
+    {
+      "name": "Weekly Deals",
+      "path": "/services",
+      "blocks": [
+        {"key": "deals.banner", "label": "Banner text", "kind": "text", "max": 400,
+         "help": "Shown on the Home and Services pages after \"Weekly Deals:\", only while Weekly Deals are on in Settings. The original is built from your Settings. If you change the deal days or amount there, update this text too, or press Reset to original.",
+         "default": null}
+      ]
+    }
+  ]
+}

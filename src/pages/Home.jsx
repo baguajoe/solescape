@@ -2,27 +2,27 @@ import { Link } from 'react-router-dom';
 import { money } from '../api.js';
 import { WeeklyDealBanner } from '../components/Pricing.jsx';
 import { slugOf, useCatalog } from '../components/Services.jsx';
+import { lines, Paragraphs, useSiteText } from '../siteText.jsx';
 import usePage from '../usePage.js';
 
 export default function Home({ config }) {
-  usePage('', 'SoleScape Foot Spa & Massage delivers mobile therapeutic foot care to restore movement, relieve chronic pain, and prevent injuries—right where you are.');
+  const { t } = useSiteText();
+  usePage('', t('home.intro').replace(/\s+/g, ' '));
   const { families } = useCatalog();
 
   return (
     <>
       <section className="hero">
         <div className="hero-copy">
-          <h1>A complete sole to soul recovery experience.</h1>
-          <p className="hero-lead">SoleScape Foot Spa &amp; Massage delivers mobile therapeutic foot care to restore movement, relieve chronic pain, and prevent injuries—right where you are.</p>
-          <p className="tagline">She travels to you</p>
+          <h1>{t('home.headline')}</h1>
+          <Paragraphs className="hero-lead" text={t('home.intro')} />
+          <p className="tagline">{t('home.tagline')}</p>
           <div className="row">
             <Link className="btn" to="/book">Book an appointment</Link>
             <Link className="btn btn-ghost" to="/services">See services and prices</Link>
           </div>
           <ul className="facts">
-            <li>All services are performed by your licensed massage therapist (LMT) at your home or workplace.</li>
-            <li>All equipment is provided for your service.</li>
-            <li>LMT arrives 30 minutes prior for setup.</li>
+            {lines(t('home.facts')).map((line) => <li key={line}>{line}</li>)}
           </ul>
         </div>
         <figure className="pin">
@@ -34,13 +34,14 @@ export default function Home({ config }) {
 
       {config?.weekly_deal && <div className="wrap"><WeeklyDealBanner deal={config.weekly_deal} /></div>}
 
-      <section className="band band-sage">
+      <section className="band band-sage" id="how">
         <div className="wrap">
           <h2>How it works</h2>
           <ol className="how">
-            <li><h3>Book online</h3><p>Pick your service and an open time on her live calendar. A $75 deposit holds it and goes toward your total.</p></li>
-            <li><h3>She comes to you</h3><p>Kerimah arrives 30 minutes early and brings all the equipment for your service.</p></li>
-            <li><h3>Relax</h3><p>Enjoy your session, then pay the balance. Need to move it? Reschedule once online with 24 hours' notice.</p></li>
+            {t('home.steps').map((step, i) => (
+              // eslint-disable-next-line react/no-array-index-key
+              <li key={i}><h3>{step.q}</h3><Paragraphs text={step.a} /></li>
+            ))}
           </ol>
         </div>
       </section>
@@ -57,7 +58,7 @@ export default function Home({ config }) {
             return (
               <Link key={f.name} className="teaser" to={`/services#${slugOf(f.name)}`}>
                 <h3>{f.name}</h3>
-                <p>{f.rows[0].summary}</p>
+                <p className="keep-lines">{f.rows[0].summary}</p>
                 <span className="price">{hourly ? `${money(low)}/hr` : `From ${money(low)}`}</span>
               </Link>
             );
@@ -76,16 +77,16 @@ export default function Home({ config }) {
         <div className="wrap about">
           <img className="portrait" src="/images/kerimah.jpg" alt="Kerimah, licensed massage therapist" width="278" height="302" loading="lazy" />
           <div>
-            <h2>Hello! I'm Kerimah, your licensed massage therapist.</h2>
-            <p>My learning experience into holistic health started in 2011, earning credentials from The Salter School &amp; The Costa Rica School of Massage Therapy. Licensed by the Commonwealth of Massachusetts, I am certified in reflexology and insured through Associated Bodywork &amp; Massage Professionals.</p>
+            <h2>{t('about.heading')}</h2>
+            <Paragraphs text={t('about.bio').split(/\n\s*\n/)[0]} />
             <Link className="btn btn-light" to="/about">Read her story</Link>
           </div>
         </div>
       </section>
 
-      <section className="section wrap cta">
-        <h2>Wellness that comes to you.</h2>
-        <p>Mobile service at your home or workplace, from Boston to the South Coast.</p>
+      <section className="section wrap cta" id="closing">
+        <h2>{t('home.cta_heading')}</h2>
+        <Paragraphs text={t('home.cta_text')} />
         <div className="row center">
           <Link className="btn" to="/book">Book an appointment</Link>
           <Link className="btn btn-ghost" to="/contact">Ask a question</Link>

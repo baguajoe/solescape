@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import { slugOf } from '../components/Services.jsx';
+
+const SUMMARY_MAX = 600;
+const NOTE_MAX = 300;
+
+function Count({ value, max }) {
+  const over = value.length > max;
+  return <small className={`count${over ? ' over' : ''}`}>{value.length} / {max} characters{over ? `: ${value.length - max} too many` : ''}</small>;
+}
 
 const dollars = (c) => (c == null ? '' : String(c / 100));
 const cents = (v) => (v === '' ? null : Math.round(Number(v) * 100));
@@ -9,8 +19,11 @@ function ServiceEdit({ s, onSaved, setError }) {
   const [f, setF] = useState({
     price: dollars(s.price_cents), length: (hourly ? s.min_hours : s.duration_min) ?? '',
     setup: s.setup_min ?? 30, deposit: dollars(s.deposit_cents), active: s.active,
+    summary: s.summary || '', note: s.note || '',
   });
   const [saved, setSaved] = useState(false);
+  const hasOriginal = s.original_summary != null;
+  const changedText = hasOriginal && (s.summary !== s.original_summary || (s.note || '') !== (s.original_note || ''));
   const set = (k) => (e) => { setSaved(false); setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }); };
   async function save(e) {
     e.preventDefault(); setError('');
@@ -21,9 +34,19 @@ function ServiceEdit({ s, onSaved, setError }) {
         body: {
           price_cents: cents(f.price), [hourly ? 'min_hours' : 'duration_min']: length,
           setup_min: Number(f.setup || 0), deposit_cents: cents(f.deposit), active: f.active,
+          summary: f.summary, note: f.note,
         },
       });
       setSaved(true); onSaved();
+    } catch (err) { setError(`${s.name}: ${err.message}`); }
+  }
+  async function resetText() {
+    if (!window.confirm(`Put back the original description and note for ${s.name}? Prices and times stay as they are.`)) return;
+    setError('');
+    try {
+      const r = await api(`/admin/services/${s.id}/reset-text`, { method: 'POST' });
+      setF({ ...f, summary: r.summary || '', note: r.note || '' });
+      setSaved(false); onSaved();
     } catch (err) { setError(err.message); }
   }
   return (
@@ -34,7 +57,23 @@ function ServiceEdit({ s, onSaved, setError }) {
       <label className="field"><span>Setup (min)</span><input inputMode="numeric" value={f.setup} onChange={set('setup')} /></label>
       <label className="field"><span>Deposit ($, blank = default)</span><input inputMode="decimal" value={f.deposit} onChange={set('deposit')} /></label>
       <label className="check"><input type="checkbox" checked={f.active} onChange={set('active')} /><span>Show</span></label>
-      <button className="btn btn-small">{saved ? 'Saved' : 'Save'}</button>
+      <div className="cat-text">
+        <div>
+          <label className="field"><span>Description</span>
+            <textarea rows="3" value={f.summary} onChange={set('summary')} aria-label={`Description for ${s.name}`} /></label>
+          <Count value={f.summary} max={SUMMARY_MAX} />
+        </div>
+        <div>
+          <label className="field"><span>Note (shown under the service)</span>
+            <textarea rows="3" value={f.note} onChange={set('note')} aria-label={`Note for ${s.name}`} /></label>
+          <Count value={f.note} max={NOTE_MAX} />
+        </div>
+      </div>
+      <div className="row tight text-actions">
+        <button className="btn btn-small">{saved ? 'Saved' : 'Save'}</button>
+        {changedText && <button type="button" className="btn btn-small btn-ghost" onClick={resetText}>Reset to original<span className="sr-only"> text for {s.name}</span></button>}
+        <a className="text-link" href={`/services#${slugOf(s.family)}`} target="_blank" rel="noreferrer">View on the Services page<span className="sr-only"> (opens a new tab)</span></a>
+      </div>
     </form>
   );
 }
@@ -92,6 +131,7 @@ export default function AdminCatalog() {
       <h1>Services and products</h1>
       {error && <p className="error" role="alert">{error}</p>}
       <h2>Services</h2>
+      <p className="note">Plain text only. Press Enter for a new line. The note for a group of lengths (like Sole Cleanse) is taken from its first length. Wording for the rest of the site is on the <Link to="/admin/text">Site text</Link> page.</p>
       {data.services.map((s) => <ServiceEdit key={s.id} s={s} onSaved={load} setError={setError} />)}
       <NewItem label="Service" path="/admin/services" onDone={load} setError={setError} />
       <h2>Products</h2>

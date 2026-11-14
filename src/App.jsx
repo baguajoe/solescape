@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import { api, INSTAGRAM, PHONE, SMS } from './api.js';
+import { api, INSTAGRAM, money, PHONE, SMS } from './api.js';
 import { useCart } from './cart.jsx';
+import { SiteTextProvider, useSiteText } from './siteText.jsx';
 import Home from './pages/Home.jsx';
 import ServicesPage from './pages/ServicesPage.jsx';
 import About from './pages/About.jsx';
@@ -66,6 +67,19 @@ function Footer() {
   );
 }
 
+// Pages with text she edits on the Site text page. They wait briefly for her latest text (see siteText.jsx).
+const TEXT_PAGES = ['/', '/services', '/about', '/contact'];
+
+function Main({ children }) {
+  const { ready } = useSiteText();
+  const { pathname, hash } = useLocation();
+  const waiting = !ready && TEXT_PAGES.includes(pathname);
+  useEffect(() => {
+    if (hash && ready) document.getElementById(hash.slice(1))?.scrollIntoView();
+  }, [pathname, hash, ready]);
+  return <main id="main" className={waiting ? 'text-wait' : undefined} aria-busy={waiting || undefined}>{children}</main>;
+}
+
 export default function App() {
   const [config, setConfig] = useState(null);
   const [open, setOpen] = useState(false);
@@ -78,11 +92,11 @@ export default function App() {
   useEffect(() => { if (!hash) window.scrollTo(0, 0); }, [pathname]);
 
   return (
-    <>
+    <SiteTextProvider refresh={isAdmin} deposit={config && money(config.deposit_cents)}>
       <a className="skip" href="#main">Skip to content</a>
       {config?.payment_mode === 'demo' && <div className="demo-bar">Demo mode: no real payments are taken.</div>}
       {!isAdmin && <Header open={open} setOpen={setOpen} shopOpen={config?.shop_open} />}
-      <main id="main">
+      <Main>
         <Routes>
           <Route path="/" element={<Home config={config} />} />
           <Route path="/services" element={<ServicesPage config={config} />} />
@@ -97,9 +111,9 @@ export default function App() {
           <Route path="/admin/*" element={<Admin />} />
           <Route path="*" element={<div className="page narrow"><h1>That page isn't here</h1><p><Link to="/">Go to the home page</Link></p></div>} />
         </Routes>
-      </main>
+      </Main>
       {!isAdmin && !hideBar && <Link className="book-bar" to="/book">Book an appointment</Link>}
       {!isAdmin && <Footer />}
-    </>
+    </SiteTextProvider>
   );
 }

@@ -22,12 +22,12 @@ export function PriceTag({ s, className = 'price' }) {
   return <span className={className}>{priceLabel(s)}</span>;
 }
 
-/** Her Weekly Deals text, built by the server from the Settings. Hidden while Weekly Deals are off. */
+/** Her Weekly Deals text: her wording from the Site text page, or built from the Settings. Hidden while Weekly Deals are off. */
 export function WeeklyDealBanner({ deal }) {
   if (!deal) return null;
   return (
     <aside className="deal-banner" aria-label="Weekly Deals">
-      <p><strong>Weekly Deals:</strong> {deal.text}</p>
+      <p className="keep-lines"><strong>Weekly Deals:</strong> {deal.text}</p>
     </aside>
   );
 }

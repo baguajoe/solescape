@@ -29,12 +29,12 @@ export function Family({ name, rows, note, extra }) {
               <b>{lengthLabel(s)}</b>
               <PriceTag s={s} />
             </div>
-            <p>{s.summary}</p>
+            <p className="keep-lines">{s.summary}</p>
             <Link className="btn btn-small" to={`/book?service=${s.slug}`}>Book {s.pricing === 'hourly' ? name : lengthLabel(s)}</Link>
           </li>
         ))}
       </ul>
-      {(note || extra) && <p className="note family-extra">{[note, extra].filter(Boolean).join(' ')}</p>}
+      {(note || extra) && <p className="note family-extra keep-lines">{[note, extra].filter(Boolean).join(' ')}</p>}
     </article>
   );
 }

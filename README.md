@@ -53,6 +53,7 @@ Pages: Home, Services (menu, events, policies, questions), About, Contact (with 
 
 - Clients: her menu, a live calendar that blocks her 30-minute setup and travel time, hourly events with a 3-hour minimum, a $75 deposit at checkout, a confirmation page, add to calendar, reschedule once (24 hours' notice) and cancel online
 - Kerimah (`/admin`): month calendar showing arrival times, phone or text bookings, reschedule, cancel, refund, mark balance paid, prices, setup time, hours, time off, deposit amount, travel time, policy text, a Messages inbox for the Contact form, a private calendar link for her phone. Adding a product turns on the Shop.
+- **Site text** (`/admin/text`): she edits the wording on Home, Services (including the Questions, which she can add, reorder and delete), About, Contact and the Weekly Deals banner, plus service descriptions and notes on Services and products. Each box has Save, Reset to original and a link to the page. Saving is live at once, no redeploy. Plain text only: line breaks are kept, anything that looks like an HTML tag is refused, and each box has a length limit with a character count. The original wording and limits live in `api/site_text.json`; her edits are rows in the `site_text` table, which is created on the next start without touching other tables. Pages wait up to 1.2 seconds for her text from `/api/site-text`, then show the original from the same JSON file until it arrives.
 
 ## Blocking time, Weekly Deals and corporate clients
 
